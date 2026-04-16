@@ -27,7 +27,8 @@
       "Bash(python -m markitdown 01_導入告知資料.pptx)",
       "Bash(node 02_quick_guide.js)",
       "Bash(node 03_full_manual.js)",
-      "Bash(ls -la *.pptx)"
+      "Bash(ls -la *.pptx)",
+      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\('index.html','utf8'\\); console.log\\('lines:',s.split\\('\\\\n'\\).length\\); console.log\\('afterShipment filter occurrences:', \\(s.match\\(/filter\\\\.afterShipment/g\\)||[]\\).length\\);\")"
     ]
   }
 }

@@ -1811,7 +1811,7 @@ function AnalysisScreen({ logs, users, projects, targets, depts, workContents, t
 
 // ===================== データ一覧画面 =====================
 function ListScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onUpdate, onDelete, onLoadMore }) {
-  const [filter, setFilter] = usePersistedState('list.filter', { dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'' });
+  const [filter, setFilter] = usePersistedState('list.filter', { dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'', afterShipment:'' });
   const [sort, setSort]     = usePersistedState('list.sort',   { key:'date', dir:'desc' });
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -1865,6 +1865,8 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
         const q = filter.projectNo.toLowerCase();
         if (!(l.projectNo || '').toLowerCase().includes(q)) return false;
       }
+      if (filter.afterShipment === 'yes' && !l.afterShipment) return false;
+      if (filter.afterShipment === 'no'  &&  l.afterShipment) return false;
       return true;
     });
   }, [logs, filter, users]);
@@ -2021,7 +2023,13 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
           <datalist id="list-projects-datalist">
             {projects.map(p=><option key={p.no} value={p.no}>{p.client} / {p.subject}</option>)}
           </datalist>
-          <button onClick={()=>{ setFilter({ dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'' }); clearPref('list.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
+          <select value={filter.afterShipment || ''} onChange={e=>ff({ afterShipment:e.target.value })}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">出荷後すべて</option>
+            <option value="yes">出荷後対応のみ</option>
+            <option value="no">出荷後対応以外</option>
+          </select>
+          <button onClick={()=>{ setFilter({ dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'', afterShipment:'' }); clearPref('list.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
           <div className="ml-auto text-xs font-bold text-slate-400">{sorted.length} 件</div>
         </div>
       </div>
@@ -2196,7 +2204,7 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
 
 // ===================== 集計画面 =====================
 function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onExpandRange, onFetchLogsByRange, onFetchYoY, onUpdateTarget, currentUser, isLeader, onFetchTargetHistory }) {
-  const [filter, setFilter]  = usePersistedState('summary.filter',   { dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'' });
+  const [filter, setFilter]  = usePersistedState('summary.filter',   { dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'', afterShipment:'' });
   const [sortMode, setSortMode] = usePersistedState('summary.sortMode','hours_desc');
   const [csvMode, setCsvMode]  = usePersistedState('summary.csvMode', 'basic');
   const [editTarget, setEditTarget] = useState(null); // { userId, projectNo, value, reason }
@@ -2286,6 +2294,8 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
         if (!(l.projectNo || '').toLowerCase().includes(q)) return false;
       }
       if (filter.location && l.location !== filter.location) return false;
+      if (filter.afterShipment === 'yes' && !l.afterShipment) return false;
+      if (filter.afterShipment === 'no'  &&  l.afterShipment) return false;
       return true;
     });
   }, [logs, filter, users]);
@@ -2565,7 +2575,13 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
             <option value="社内">社内のみ</option>
             <option value="社外">社外のみ</option>
           </select>
-          <button onClick={()=>{ setFilter({ dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'' }); clearPref('summary.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
+          <select value={filter.afterShipment || ''} onChange={e=>ff({ afterShipment:e.target.value })}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">出荷後すべて</option>
+            <option value="yes">出荷後対応のみ</option>
+            <option value="no">出荷後対応以外</option>
+          </select>
+          <button onClick={()=>{ setFilter({ dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'', afterShipment:'' }); clearPref('summary.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
           <div className="ml-auto flex items-center gap-2">
             <label className="text-xs font-bold text-slate-500">並び替え：</label>
             <select value={sortMode} onChange={e=>setSortMode(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
