@@ -1,0 +1,3235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>作業時間 一元管理システム</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231e3a8a'/><circle cx='16' cy='17' r='9' fill='none' stroke='%2393c5fd' stroke-width='2'/><path d='M16 11 V17 L20.5 19.5' stroke='white' stroke-width='2.6' stroke-linecap='round' fill='none'/><circle cx='16' cy='17' r='1.3' fill='white'/><rect x='13' y='4' width='6' height='2.5' rx='0.8' fill='%2393c5fd'/></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+    * { font-family: 'Noto Sans JP', sans-serif; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes slideDown { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    .slide-down { animation: slideDown 0.2s ease-out forwards; }
+    .scrollbar-hide::-webkit-scrollbar { display:none; }
+    .sort-btn:hover .sort-icon { opacity:1; }
+    .sort-icon { opacity:0.3; transition:opacity 0.15s; }
+    .sort-icon.active { opacity:1; }
+    input[type=checkbox] { accent-color:#1d4ed8; }
+    .bar-fill { transition: width 0.6s cubic-bezier(.4,0,.2,1); }
+    .menu-card { transition: all 0.2s ease-out; }
+    .menu-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -12px rgba(30,64,175,0.25); }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+// ===================== アイコン =====================
+const Icon = ({ d, size=20, className='' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
+);
+const IEdit    = ({s=20,c=''}) => <Icon size={s} className={c} d={<><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M10.4 12.6a2 2 0 1 1 3 3L8 21l-4 1 1-4Z"/><path d="m13.6 15.4 3.2-3.2"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5.5"/><path d="M4 13.5V6a2 2 0 0 1 2-2h2"/></>}/>;
+const IList    = ({s=20,c=''}) => <Icon size={s} className={c} d={<><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></>}/>;
+const IChart   = ({s=20,c=''}) => <Icon size={s} className={c} d={<><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></>}/>;
+const ICog     = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 1 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>}/>;
+const ISave    = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>}/>;
+const IPlus    = ({s=20,c=''}) => <Icon size={s} className={c} d={<><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></>}/>;
+const IDl      = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>}/>;
+const IX       = ({s=20,c=''}) => <Icon size={s} className={c} d={<><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></>}/>;
+const IRefresh = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>}/>;
+const ISearch  = ({s=20,c=''}) => <Icon size={s} className={c} d={<><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></>}/>;
+const IHome    = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>}/>;
+const IUser    = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>}/>;
+const IUsers   = ({s=20,c=''}) => <Icon size={s} className={c} d={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>}/>;
+const ITrash   = ({s=16,c=''}) => <Icon size={s} className={c} d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></>}/>;
+const ICheck   = ({s=16,c=''}) => <Icon size={s} className={c} d={<polyline points="20 6 9 17 4 12"/>}/>;
+const ITarget  = ({s=20,c=''}) => <Icon size={s} className={c} d={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>}/>;
+const ILock    = ({s=16,c=''}) => <Icon size={s} className={c} d={<><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>}/>;
+const IFolder  = ({s=20,c=''}) => <Icon size={s} className={c} d={<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>}/>;
+const ICopy    = ({s=16,c=''}) => <Icon size={s} className={c} d={<><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></>}/>;
+const IStar    = ({s=14,c=''}) => <Icon size={s} className={c} d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>}/>;
+
+// ===================== マスターデータ =====================
+const DEPARTMENTS_DEFAULT = ['営業グループ','設計グループ','高温グループ','電気グループ','製造グループ','ソフトグループ'];
+const WORK_CONTENTS_DEFAULT = {
+  '営業グループ': ['見積り','客先対応','マーケティング'],
+  '設計グループ': ['構想設計','詳細設計','図面作成','設計レビュー','手配'],
+  '高温グループ': ['熱計算','炉内テスト','データ解析','レポート作成'],
+  '電気グループ': ['回路設計','配線作業','盤チェック','PLCソフト作成','現地調整'],
+  '製造グループ': ['部品加工','組立作業','溶接','出荷検査','梱包'],
+  'ソフトグループ': ['要件定義','基本設計','コーディング','単体テスト','総合テスト','デバッグ'],
+};
+const DEPT_COLORS = {
+  '営業グループ': 'bg-sky-100 text-sky-700',
+  '設計グループ': 'bg-violet-100 text-violet-700',
+  '高温グループ': 'bg-orange-100 text-orange-700',
+  '電気グループ': 'bg-blue-100 text-blue-700',
+  '製造グループ': 'bg-green-100 text-green-700',
+  'ソフトグループ': 'bg-pink-100 text-pink-700',
+};
+const DEFAULT_DEPT_COLOR = 'bg-slate-100 text-slate-700';
+const getDeptColor = (d) => DEPT_COLORS[d] || DEFAULT_DEPT_COLOR;
+
+// ===================== ユーティリティ =====================
+const today = () => new Date().toISOString().split('T')[0];
+const fmtDate = d => d ? d.replace(/-/g,'/') : '';
+const DOW_JP = ['日','月','火','水','木','金','土'];
+const fmtDateDow = d => {
+  if (!d) return '';
+  // d は "YYYY-MM-DD" 想定。タイムゾーンずれを避けるためローカル日時で生成
+  const [y,m,day] = d.split('-').map(Number);
+  if (!y || !m || !day) return fmtDate(d);
+  const dow = DOW_JP[new Date(y, m-1, day).getDay()];
+  return `${y}/${String(m).padStart(2,'0')}/${String(day).padStart(2,'0')}(${dow})`;
+};
+const fmtH = h => `${Number(h).toFixed(1)}h`;
+const ym = d => d ? d.substring(0,7) : '';
+// 日付を N 日ずらす（YYYY-MM-DD 文字列で受け取り・返す）
+const shiftDate = (d, days) => {
+  const base = d ? d : today();
+  const [y, m, day] = base.split('-').map(Number);
+  const dt = new Date(y, m-1, day);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+};
+// "YYYY-MM" → "YYYY年M月"
+const ymJP = m => {
+  if (!m) return '';
+  const [y, mo] = m.split('-').map(Number);
+  if (!y || !mo) return m;
+  return `${y}年${mo}月`;
+};
+
+// ---------- 会計年度（期）: 弊社は 9月 - 翌8月 ----------
+// 第46期 = 2025-09-01 〜 2026-08-31 を基準点として前後計算する。
+const FISCAL_ANCHOR_NUM  = 46;
+const FISCAL_ANCHOR_YEAR = 2025; // この年の 9 月から第46期が始まる
+
+// 期番号（"YYYY-MM-DD" or Date or "YYYY-MM" を受け付ける）
+const getFiscalYear = (d) => {
+  if (!d) d = today();
+  let y, m;
+  if (d instanceof Date) { y = d.getFullYear(); m = d.getMonth() + 1; }
+  else {
+    const parts = String(d).split('-').map(Number);
+    y = parts[0]; m = parts[1] || 1;
+  }
+  // 9〜12月 は (年 - ANCHOR_YEAR) 期ぶん進んでいる。1〜8月 は (年-1-ANCHOR_YEAR)。
+  const startYear = m >= 9 ? y : y - 1;
+  return FISCAL_ANCHOR_NUM + (startYear - FISCAL_ANCHOR_YEAR);
+};
+// 前期(9〜2月) / 後期(3〜8月)
+const getFiscalHalf = (d) => {
+  if (!d) d = today();
+  let m;
+  if (d instanceof Date) m = d.getMonth() + 1;
+  else m = Number(String(d).split('-')[1] || 1);
+  if (m >= 9 || m <= 2) return 'H1'; // 前期
+  return 'H2';                        // 後期
+};
+// "46期前期" / "46期後期"
+const fiscalLabel = (d) => {
+  const fy = getFiscalYear(d);
+  const half = getFiscalHalf(d);
+  return `${fy}期${half === 'H1' ? '前期' : '後期'}`;
+};
+// 期 + 半期 → [from, to]（YYYY-MM-DD 文字列）
+const fiscalHalfRange = (fy, half) => {
+  // 期 fy の開始年 = FISCAL_ANCHOR_YEAR + (fy - FISCAL_ANCHOR_NUM)
+  const startYear = FISCAL_ANCHOR_YEAR + (fy - FISCAL_ANCHOR_NUM);
+  if (half === 'H1') {
+    // 9月1日 〜 翌2月末日
+    const from = `${startYear}-09-01`;
+    const toDate = new Date(startYear + 1, 2, 0); // 翌年3月0日 = 2月末
+    const to = `${toDate.getFullYear()}-${String(toDate.getMonth()+1).padStart(2,'0')}-${String(toDate.getDate()).padStart(2,'0')}`;
+    return [from, to];
+  } else {
+    // 3月1日 〜 8月31日
+    const from = `${startYear + 1}-03-01`;
+    const to   = `${startYear + 1}-08-31`;
+    return [from, to];
+  }
+};
+// 期全体（9月1日 〜 翌年8月31日）
+const fiscalYearRange = (fy) => {
+  const startYear = FISCAL_ANCHOR_YEAR + (fy - FISCAL_ANCHOR_NUM);
+  return [`${startYear}-09-01`, `${startYear + 1}-08-31`];
+};
+
+function downloadCSV(content, filename) {
+  const blob = new Blob(['\uFEFF' + content], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+const findTarget = (targets, userId, projectNo) =>
+  targets.find(t => Number(t.userId) === Number(userId) && t.projectNo === projectNo);
+
+// ===================== ユーザー設定の永続化（localStorage） =====================
+// キーは "worktime.prefs.v1.<name>"。破損時は黙って無視してデフォルトを使う。
+const PREFS_PREFIX = 'worktime.prefs.v1.';
+
+const loadPref = (name, fallback) => {
+  try {
+    const raw = localStorage.getItem(PREFS_PREFIX + name);
+    if (raw == null) return fallback;
+    return JSON.parse(raw);
+  } catch (e) {
+    return fallback;
+  }
+};
+
+const savePref = (name, value) => {
+  try {
+    localStorage.setItem(PREFS_PREFIX + name, JSON.stringify(value));
+  } catch (e) { /* ignore quota/security errors */ }
+};
+
+const clearPref = (name) => {
+  try { localStorage.removeItem(PREFS_PREFIX + name); } catch (e) {}
+};
+
+// state を localStorage に自動保存する useState ラッパー
+function usePersistedState(name, fallback) {
+  const [state, setState] = useState(() => {
+    const loaded = loadPref(name, undefined);
+    return loaded === undefined ? fallback : loaded;
+  });
+  useEffect(() => {
+    savePref(name, state);
+  }, [name, state]);
+  return [state, setState];
+}
+
+// ===================== 認証（トークン）永続化 =====================
+const AUTH_STORAGE_KEY = 'worktime.auth.v1';
+const loadAuth = () => {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.token || !obj.user) return null;
+    return obj;
+  } catch (e) { return null; }
+};
+const saveAuth = (auth) => {
+  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth)); } catch (e) {}
+};
+const clearAuth = () => {
+  try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch (e) {}
+};
+const ROLE_LABEL = { admin: '管理者', leader: 'リーダー', member: 'メンバー' };
+const ROLE_COLOR = { admin: 'bg-red-100 text-red-700', leader: 'bg-amber-100 text-amber-700', member: 'bg-slate-100 text-slate-600' };
+
+// ===================== ログイン画面 =====================
+function LoginScreen({ apiUrl, onLoggedIn, onApiUrlChange }) {
+  const [users, setUsers]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [pin, setPin]           = useState('');
+  const [pin2, setPin2]         = useState('');
+  const [mode, setMode]         = useState('login'); // 'login' | 'setup'
+  const [submitting, setSubmitting] = useState(false);
+  const [apiInput, setApiInput] = useState(apiUrl);
+
+  const fetchUsers = async (url) => {
+    setLoading(true);
+    setError('');
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(`${url}/auth/users`, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setUsers(data || []);
+    } catch (e) {
+      setError(e.name === 'AbortError' ? 'タイムアウト: サーバーに接続できません' : `サーバーに接続できません (${e.message})`);
+      setUsers([]);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchUsers(apiUrl); }, [apiUrl]);
+
+  // 選択中ユーザーが PIN 未設定なら setup モードに切替
+  useEffect(() => {
+    const u = users.find(x => String(x.id) === String(selectedUserId));
+    if (u && !u.hasPin) setMode('setup'); else setMode('login');
+    setPin(''); setPin2('');
+  }, [selectedUserId, users]);
+
+  const selectedUser = users.find(x => String(x.id) === String(selectedUserId));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedUserId) return;
+    if (!/^\d{4}$/.test(pin)) { setError('PINは4桁の数字で入力してください'); return; }
+    if (mode === 'setup' && pin !== pin2) { setError('確認用PINが一致しません'); return; }
+    setSubmitting(true);
+    setError('');
+    try {
+      const path = mode === 'setup' ? '/auth/setup-pin' : '/auth/login';
+      const res = await fetch(`${apiUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: Number(selectedUserId), pin })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || `HTTP ${res.status}`); setSubmitting(false); return; }
+      // 既に PIN 設定済みだが setup で叩いてしまった場合などのフォールバック
+      if (data.needsSetup) { setMode('setup'); setSubmitting(false); return; }
+      if (!data.token || !data.user) { setError('レスポンスが不正です'); setSubmitting(false); return; }
+      saveAuth({ token: data.token, user: data.user });
+      onLoggedIn({ token: data.token, user: data.user });
+    } catch (err) {
+      setError(`通信エラー: ${err.message}`);
+      setSubmitting(false);
+    }
+  };
+
+  // 部署ごとにグルーピング
+  const grouped = useMemo(() => {
+    const map = {};
+    users.forEach(u => {
+      if (!map[u.department]) map[u.department] = [];
+      map[u.department].push(u);
+    });
+    return Object.entries(map);
+  }, [users]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border-t-8 border-blue-600 p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <div className="inline-flex w-14 h-14 bg-blue-100 rounded-2xl items-center justify-center mx-auto">
+            <ILock s={28} c="text-blue-700"/>
+          </div>
+          <h1 className="text-xl font-black text-slate-800">作業時間 一元管理システム</h1>
+          <p className="text-xs text-slate-500">担当者を選択してPINでログインしてください</p>
+        </div>
+
+        {loading ? (
+          <div className="py-10 text-center">
+            <IRefresh s={28} c="animate-spin text-blue-600 mx-auto"/>
+            <p className="text-xs text-slate-500 mt-3">サーバーに接続中...</p>
+          </div>
+        ) : error && users.length === 0 ? (
+          <div className="space-y-4">
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl p-3">{error}</div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500">接続先URL</label>
+              <div className="flex gap-2">
+                <input value={apiInput} onChange={e=>setApiInput(e.target.value)} className="flex-1 border-2 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"/>
+                <button onClick={()=>{ onApiUrlChange(apiInput); fetchUsers(apiInput); }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">再接続</button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-black text-slate-600 uppercase tracking-wider">担当者 *</label>
+              <select required value={selectedUserId} onChange={e=>setSelectedUserId(e.target.value)}
+                className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none">
+                <option value="">— 選択してください —</option>
+                {grouped.map(([dept, list]) => (
+                  <optgroup key={dept} label={dept}>
+                    {list.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}{u.hasPin ? '' : '（初回：PIN未設定）'}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {selectedUser && (
+                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${getDeptColor(selectedUser.department)}`}>{selectedUser.department}</span>
+              )}
+            </div>
+
+            {selectedUser && (
+              <>
+                {mode === 'setup' && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold rounded-xl p-3">
+                    初回ログインです。4桁の PIN を設定してください。（以降は同じ PIN でログインします）
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-600 uppercase tracking-wider">
+                    {mode === 'setup' ? '新しい PIN（4桁）*' : 'PIN（4桁）*'}
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d{4}"
+                    maxLength={4}
+                    autoFocus
+                    required
+                    value={pin}
+                    onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,4))}
+                    className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-lg font-mono tracking-[0.5em] text-center focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none"
+                    placeholder="••••"
+                  />
+                </div>
+                {mode === 'setup' && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-slate-600 uppercase tracking-wider">PIN 確認（再入力）*</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="\d{4}"
+                      maxLength={4}
+                      required
+                      value={pin2}
+                      onChange={e=>setPin2(e.target.value.replace(/\D/g,'').slice(0,4))}
+                      className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-lg font-mono tracking-[0.5em] text-center focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none"
+                      placeholder="••••"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl p-3">{error}</div>}
+
+            <button type="submit" disabled={submitting || !selectedUserId || pin.length !== 4 || (mode==='setup' && pin2.length !== 4)}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-xl text-sm font-black transition-colors flex items-center justify-center gap-2">
+              {submitting ? <IRefresh s={16} c="animate-spin"/> : <ILock s={16}/>}
+              {mode === 'setup' ? 'PIN を設定してログイン' : 'ログイン'}
+            </button>
+          </form>
+        )}
+
+        <div className="pt-4 border-t border-slate-100">
+          <details className="text-[10px] text-slate-400">
+            <summary className="cursor-pointer hover:text-slate-600">接続先URLを変更</summary>
+            <div className="flex gap-2 mt-2">
+              <input value={apiInput} onChange={e=>setApiInput(e.target.value)} className="flex-1 border rounded px-2 py-1 text-[10px]"/>
+              <button type="button" onClick={()=>{ onApiUrlChange(apiInput); fetchUsers(apiInput); }}
+                className="bg-slate-200 px-2 rounded text-[10px] font-bold hover:bg-slate-300">適用</button>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== メインアプリ =====================
+function App() {
+  const [activeTab, setActiveTab] = useState('home');
+  // 入力画面へ遷移する際に「この日付を初期値にしたい」というリクエストを
+  // 一時的に保持するための state。
+  //   - ホーム画面の入力忘れパネルから「今すぐ入力」やチップクリックで遷移
+  //     するときに使う。
+  //   - InputScreen がマウント時に 1 回だけ読み取り、即座に null にクリアする
+  //     （useEffect + onPresetDateConsumed）ので、通常のタブ切替では影響しない。
+  const [pendingInputDate, setPendingInputDate] = useState(null);
+
+  // 画面遷移ヘルパー。第2引数で { date } を渡すと、入力画面のマウント時に
+  // その日付を初期値として適用する。date を省略すれば通常のタブ切替と同じ。
+  const navigate = (tabId, options = {}) => {
+    if (tabId === 'input' && options.date) {
+      setPendingInputDate(options.date);
+    }
+    setActiveTab(tabId);
+  };
+  const [users, setUsers]         = useState([]);
+  const [projects, setProjects]   = useState([]);
+  const [logs, setLogs]           = useState([]);
+  const [targets, setTargets]     = useState([]);
+  const [depts, setDepts]         = useState(DEPARTMENTS_DEFAULT);
+  const [workContents, setWorkContents] = useState(WORK_CONTENTS_DEFAULT);
+  const [totalLogs, setTotalLogs] = useState(0);
+  const [rangeTotal, setRangeTotal] = useState(0);
+  // サーバーから読み込み済みの日付範囲（loadedRange.from 〜 loadedRange.to）
+  // 初期は当月のみ。ユーザー操作で過去へ拡張できる。
+  const [loadedRange, setLoadedRange] = useState(null);
+  const [lastLog, setLastLog]     = useState(null);
+  const [notif, setNotif]         = useState({ msg:'', err:false });
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError]   = useState('');
+  const [lastSync, setLastSync]   = useState(null);
+  const [apiUrl, setApiUrl]       = useState(() => localStorage.getItem('worktime_api_url') || 'http://192.168.1.8:3000/api');
+  const [apiUrlInput, setApiUrlInput] = useState(apiUrl);
+
+  // 認証状態（localStorage から復元）
+  const [auth, setAuth] = useState(() => loadAuth());
+  const isLoggedIn = !!(auth && auth.token && auth.user);
+
+  const notify = (msg, err=false) => {
+    setNotif({ msg, err });
+    setTimeout(() => setNotif({ msg:'', err:false }), 3000);
+  };
+
+  // ログアウト（トークンを破棄して初期画面に戻す）
+  const logout = (msg) => {
+    clearAuth();
+    setAuth(null);
+    setUsers([]); setProjects([]); setLogs([]); setTargets([]);
+    setTotalLogs(0); setLastLog(null); setLastSync(null);
+    setActiveTab('home');
+    if (msg) notify(msg, true);
+  };
+
+  // ログイン成功時
+  const handleLoggedIn = (a) => {
+    setAuth(a);
+    // auth 更新後の loadData は useEffect 経由で走る
+  };
+
+  // 認証ヘッダ付き fetch
+  const authedFetch = async (url, opts = {}) => {
+    const token = auth?.token || (loadAuth() || {}).token;
+    const headers = { ...(opts.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, { ...opts, headers });
+    if (res.status === 401) {
+      // セッション無効 → 強制ログアウト
+      logout('セッションが無効になりました。再ログインしてください');
+      throw new Error('UNAUTHORIZED');
+    }
+    return res;
+  };
+
+  // 当月初日 "YYYY-MM-01"
+  const currentMonthStart = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+  };
+
+  // 初期ロード / 範囲変更ロード
+  //   silent=true のときは、現在の loadedRange をそのまま使ってバックグラウンド同期するだけ
+  //   range={from,to} を渡すと、その範囲でログを読み直す（過去遡及など）
+  const loadData = async (url = apiUrl, silent = false, range = null) => {
+    if (!auth || !auth.token) return;
+    if (!silent) setIsLoading(true);
+    setApiError('');
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 10000);
+
+      // 使う範囲を確定
+      const effectiveRange = range
+        || loadedRange
+        || { from: currentMonthStart(), to: today() };
+      const q = `?dateFrom=${encodeURIComponent(effectiveRange.from)}&dateTo=${encodeURIComponent(effectiveRange.to)}`;
+      const res = await authedFetch(`${url}/init-data${q}`, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setUsers(data.users || []);
+      setProjects(data.projects || []);
+      setLogs(data.logs || []);
+      setTargets(data.targets || []);
+      setTotalLogs(data.totalLogs || (data.logs || []).length);
+      setRangeTotal(data.rangeTotal || (data.logs || []).length);
+      // サーバーが採用した範囲を正として保存
+      if (data.loadedRange) setLoadedRange(data.loadedRange);
+      else setLoadedRange(effectiveRange);
+      if (data.departments && data.departments.length) setDepts(data.departments);
+      if (data.workContents) setWorkContents(data.workContents);
+      localStorage.setItem('worktime_api_url', url);
+      setApiUrl(url);
+      setLastSync(new Date());
+    } catch (e) {
+      if (e.message === 'UNAUTHORIZED') return;
+      if (!silent) setApiError(e.name === 'AbortError' ? 'タイムアウト: サーバーに接続できません。' : `サーバーに接続できません。(${e.message})`);
+    } finally { if (!silent) setIsLoading(false); }
+  };
+
+  // 過去方向に範囲を広げる（月数指定）
+  const expandRange = async (months) => {
+    const base = loadedRange || { from: currentMonthStart(), to: today() };
+    const [y, m, d] = base.from.split('-').map(Number);
+    const newFrom = new Date(y, m - 1 - (months || 1), 1);
+    const nf = `${newFrom.getFullYear()}-${String(newFrom.getMonth()+1).padStart(2,'0')}-01`;
+    await loadData(apiUrl, false, { from: nf, to: base.to });
+  };
+
+  // ログイン後に初期ロード
+  useEffect(() => {
+    if (isLoggedIn) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn]);
+
+  // 30秒ごとにバックグラウンド同期（他ユーザーの入力を自動反映）
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (isLoading) return;
+    const id = setInterval(() => loadData(apiUrl, true), 30000);
+    return () => clearInterval(id);
+  }, [isLoggedIn, isLoading, apiUrl]);
+
+  // 追加ログ取得（従来のページネーション — 全期間を連番で追加取得）
+  // 現在は loadedRange 方式に移行しているが、ListScreen の「もっと読む」用に残す。
+  const loadMoreLogs = async (offset) => {
+    try {
+      const res = await authedFetch(`${apiUrl}/logs?limit=500&offset=${offset}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setLogs(prev => [...prev, ...(data.logs || [])]);
+      setTotalLogs(data.total || 0);
+      notify(`${(data.logs || []).length}件を追加読み込みしました`);
+      return true;
+    } catch(e) {
+      if (e.message !== 'UNAUTHORIZED') notify('通信エラー: ' + e.message, true);
+      return false;
+    }
+  };
+
+  // 指定した日付範囲でログを絞り込んで取得（集計画面から期選択時に使う）
+  const fetchLogsByRange = async (from, to, extraParams = {}) => {
+    const params = new URLSearchParams({ dateFrom: from, dateTo: to, limit: '5000', offset: '0' });
+    for (const [k, v] of Object.entries(extraParams)) {
+      if (v != null && v !== '') params.set(k, v);
+    }
+    const res = await authedFetch(`${apiUrl}/logs?${params.toString()}`);
+    if (!res.ok) {
+      if (res.status !== 401) notify(`取得エラー: HTTP ${res.status}`, true);
+      return null;
+    }
+    return res.json();
+  };
+
+  // 前年同期比較 (YoY)
+  const fetchYoY = async (from, to) => {
+    const res = await authedFetch(`${apiUrl}/stats/yoy?dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}`);
+    if (!res.ok) {
+      if (res.status !== 401) notify(`YoY取得エラー: HTTP ${res.status}`, true);
+      return null;
+    }
+    return res.json();
+  };
+
+  // 自分の直近 N 営業日の入力状況（ホーム画面の「入力忘れ」パネルで使用）
+  //   サーバー側で土日祝・会社休業日を除外した営業日だけを返す。
+  //   失敗してもホーム画面の他の要素には影響を出さないよう、静かに null を返す。
+  const fetchMyInputStatus = async (days = 7) => {
+    try {
+      const res = await authedFetch(`${apiUrl}/me/input-status?days=${days}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const callApi = async (method, path, body) => {
+    const res = await authedFetch(`${apiUrl}${path}`, {
+      method, headers: { 'Content-Type':'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      let code = null;
+      try {
+        const j = await res.json();
+        if (j.error) msg = j.error;
+        if (j.code)  code = j.code;
+      } catch {}
+      const err = new Error(msg);
+      err.status = res.status;
+      err.code   = code;
+      throw err;
+    }
+    return res.json();
+  };
+
+  const handleSaveLog = async (log) => {
+    try {
+      const data = await callApi('POST', '/logs', log);
+      if (data.success) {
+        const newLog = { ...log, id: data.logId };
+        setLogs(prev => [newLog, ...prev]);
+        setLastLog(newLog);
+        setTotalLogs(t => t + 1);
+        if (log.isNewProject) {
+          setProjects(prev => [...prev, { no: log.projectNo, client: log.newClient, subject: log.newSubject, isClosed: false, lastUsed: Date.now() }]);
+        } else {
+          setProjects(prev => prev.map(p => p.no === log.projectNo ? { ...p, lastUsed: Date.now() } : p));
+        }
+        if (data.target) {
+          setTargets(prev => [...prev, data.target]);
+        }
+        notify('登録しました');
+        return true;
+      }
+    } catch(e) {
+      if (e.code === 'PROJECT_CLOSED') {
+        // サーバー側の自動クローズ / 手動クローズで締め切られた注番
+        notify('この注番はクロースされています。管理者に解除を依頼してください', true);
+        // 画面上も最新のクローズ状態に同期しておく
+        setProjects(prev => prev.map(p => p.no === log.projectNo ? { ...p, isClosed: true } : p));
+      } else {
+        notify('通信エラー: ' + e.message, true);
+      }
+    }
+    return false;
+  };
+
+  const handleUpdateLog = async (log) => {
+    try {
+      const data = await callApi('PUT', `/logs/${log.id}`, log);
+      if (data.success) {
+        setLogs(prev => prev.map(l => l.id === log.id ? log : l));
+        notify('更新しました');
+        return true;
+      }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleDeleteLog = async (logId) => {
+    try {
+      const data = await callApi('DELETE', `/logs/${logId}`);
+      if (data.success) {
+        setLogs(prev => prev.filter(l => l.id !== logId));
+        setTotalLogs(t => Math.max(0, t - 1));
+        notify('削除しました');
+        return true;
+      }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleUpdateTarget = async (userId, projectNo, targetHours, reason) => {
+    try {
+      const data = await callApi('PUT', '/targets', { userId, projectNo, targetHours, reason });
+      if (data.success && data.target) {
+        setTargets(prev => {
+          const exists = prev.some(t => Number(t.userId) === Number(userId) && t.projectNo === projectNo);
+          return exists
+            ? prev.map(t => (Number(t.userId) === Number(userId) && t.projectNo === projectNo) ? data.target : t)
+            : [...prev, data.target];
+        });
+        notify('目標時間を更新しました');
+        return true;
+      }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  // 目標時間の変更履歴を取得（leader/admin 用）
+  const handleFetchTargetHistory = async (userId, projectNo) => {
+    try {
+      const res = await authedFetch(`${apiUrl}/targets/${userId}/${encodeURIComponent(projectNo)}/history`);
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+        throw new Error(msg);
+      }
+      return await res.json();
+    } catch(e) {
+      if (e.message !== 'UNAUTHORIZED') notify('履歴取得エラー: ' + e.message, true);
+      return null;
+    }
+  };
+
+  // 管理者による PIN リセット
+  const handleResetPin = async (userId) => {
+    try {
+      const data = await callApi('POST', '/auth/reset-pin', { userId });
+      if (data.success) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, hasPin: false } : u));
+        notify('PIN をリセットしました');
+        return true;
+      }
+    } catch(e) { notify('エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleUpdateProject = async (projectNo, payload) => {
+    try {
+      const data = await callApi('PUT', `/projects/${encodeURIComponent(projectNo)}`, payload);
+      if (data.success) {
+        setProjects(prev => prev.map(p => p.no === projectNo
+          ? { ...p, client: payload.client, subject: payload.subject, isClosed: !!payload.isClosed }
+          : p));
+        notify('注番情報を更新しました');
+        return true;
+      }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleSaveUser = async (user) => {
+    try {
+      if (user.id) {
+        const data = await callApi('PUT', `/users/${user.id}`, user);
+        if (data.success) { setUsers(prev => prev.map(u => u.id === user.id ? user : u)); notify('更新しました'); return true; }
+      } else {
+        const data = await callApi('POST', '/users', user);
+        if (data.success) { setUsers(prev => [...prev, { ...user, id: data.userId }]); notify('ユーザーを登録しました'); return true; }
+      }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleDeleteUser = async (userId) => {
+    try {
+      const data = await callApi('DELETE', `/users/${userId}`);
+      if (data.success) { setUsers(prev => prev.filter(u => u.id !== userId)); notify('削除しました'); return true; }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleSaveWorkContents = async (dept, items) => {
+    try {
+      const data = await callApi('PUT', `/work-contents/${encodeURIComponent(dept)}`, { items });
+      if (data.success) { setWorkContents(prev => ({ ...prev, [dept]: items })); notify('作業内容を更新しました'); return true; }
+    } catch(e) { notify('通信エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleAddDept = async (name) => {
+    try {
+      const data = await callApi('POST', '/departments', { name });
+      if (data.success) {
+        setDepts(prev => prev.includes(name) ? prev : [...prev, name]);
+        setWorkContents(prev => prev[name] ? prev : { ...prev, [name]: [] });
+        notify('グループを登録しました');
+        return true;
+      }
+    } catch(e) { notify('エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleRenameDept = async (oldName, newName) => {
+    try {
+      const data = await callApi('PUT', `/departments/${encodeURIComponent(oldName)}`, { newName });
+      if (data.success) {
+        setDepts(prev => prev.map(d => d === oldName ? newName : d));
+        setWorkContents(prev => {
+          const next = { ...prev };
+          next[newName] = next[oldName] || [];
+          delete next[oldName];
+          return next;
+        });
+        setUsers(prev => prev.map(u => u.department === oldName ? { ...u, department: newName } : u));
+        notify('グループ名を更新しました');
+        return true;
+      }
+    } catch(e) { notify('エラー: ' + e.message, true); }
+    return false;
+  };
+
+  const handleDeleteDept = async (name) => {
+    try {
+      const data = await callApi('DELETE', `/departments/${encodeURIComponent(name)}`);
+      if (data.success) {
+        setDepts(prev => prev.filter(d => d !== name));
+        setWorkContents(prev => { const next = { ...prev }; delete next[name]; return next; });
+        notify('グループを削除しました');
+        return true;
+      }
+    } catch(e) { notify('エラー: ' + e.message, true); }
+    return false;
+  };
+
+  // 未ログイン → ログイン画面
+  if (!isLoggedIn) {
+    return <LoginScreen apiUrl={apiUrl} onLoggedIn={handleLoggedIn} onApiUrlChange={(u)=>{ localStorage.setItem('worktime_api_url', u); setApiUrl(u); }}/>;
+  }
+
+  // 初回ロード（まだデータが来ていない）: フルスクリーンスピナー
+  //   mid-session の reload（期変更で range を広げるなど）ではこの分岐に
+  //   入らず、下の通常ツリーを維持したままオーバーレイだけが出るようにする。
+  //   ここで return してしまうと子コンポーネント（AnalysisScreen /
+  //   SummaryScreen など）がアンマウントされ、期変更の state 更新が
+  //   localStorage に保存される前に失われる。
+  if (isLoading && users.length === 0) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-100">
+      <div className="text-center space-y-4">
+        <IRefresh s={40} c="animate-spin text-blue-600 mx-auto" />
+        <p className="font-bold text-blue-900">サーバーに接続中...</p>
+        <p className="text-sm text-slate-500">{apiUrl}</p>
+      </div>
+    </div>
+  );
+
+  if (apiError && users.length === 0) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border-t-8 border-red-500 p-8 space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><IX s={24} c="text-red-600"/></div>
+          <div><h2 className="text-xl font-black text-slate-800">接続できません</h2><p className="text-sm text-red-600">{apiError}</p></div>
+        </div>
+        <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-bold text-slate-500">接続先URLを変更して再試行</p>
+          <div className="flex gap-2">
+            <input value={apiUrlInput} onChange={e=>setApiUrlInput(e.target.value)} className="flex-1 border-2 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" placeholder="http://192.168.1.x:3000/api"/>
+            <button onClick={()=>loadData(apiUrlInput)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">接続</button>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button onClick={()=>logout()} className="text-xs text-slate-500 hover:text-red-600 underline">ログアウト</button>
+        </div>
+        <ul className="text-xs text-slate-400 list-disc list-inside space-y-1">
+          <li>ホストPCで <code className="bg-slate-100 px-1 rounded">node server.js</code> が起動していますか？</li>
+          <li>ファイアウォールでポート3000は許可されていますか？</li>
+        </ul>
+      </div>
+    </div>
+  );
+
+  const currentUser = auth.user;
+  const isAdmin  = currentUser.role === 'admin';
+  const isLeader = currentUser.role === 'leader' || currentUser.role === 'admin';
+
+  // 権限に応じてタブを絞る（settings は admin のみ）
+  const navItems = [
+    { id:'home',     icon:<IHome s={16}/>,  label:'ホーム' },
+    { id:'input',    icon:<IEdit s={16}/>,  label:'入力画面' },
+    { id:'analysis', icon:<IChart s={16}/>, label:'データ解析画面' },
+    ...(isAdmin ? [{ id:'settings', icon:<ICog s={16}/>, label:'環境設定画面' }] : []),
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {/* ヘッダー */}
+      <header className="bg-gradient-to-r from-blue-950 to-blue-800 text-white shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>setActiveTab('home')}>
+            <IEdit s={24} c="text-blue-300"/>
+            <h1 className="text-base font-black tracking-tight">作業時間 一元管理システム</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {notif.msg && (
+              <div className={`px-5 py-1.5 rounded-full text-sm font-bold shadow-lg fade-in ${notif.err ? 'bg-red-500' : 'bg-emerald-500'}`}>{notif.msg}</div>
+            )}
+            {apiError && (
+              <div className="flex items-center gap-2 text-yellow-300 text-xs font-bold bg-yellow-900/40 px-3 py-1 rounded-full">
+                <span>⚠</span><span>接続エラー</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 bg-blue-900/40 rounded-full pl-3 pr-2 py-1">
+              <div className="text-xs font-bold leading-tight text-right">
+                <div>{currentUser.name}</div>
+                <div className="text-[9px] text-blue-200">{currentUser.department}</div>
+              </div>
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${ROLE_COLOR[currentUser.role] || ROLE_COLOR.member}`}>{ROLE_LABEL[currentUser.role] || currentUser.role}</span>
+            </div>
+            <button onClick={()=>logout()}
+              title="ログアウト"
+              className="bg-blue-800 hover:bg-red-600 transition-colors rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs font-bold text-white">
+              <IX s={12}/>
+              ログアウト
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ナビ */}
+      <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-14 z-40">
+        <div className="max-w-7xl mx-auto px-2 flex overflow-x-auto scrollbar-hide">
+          {navItems.map(({ id, icon, label }) => (
+            <button key={id} onClick={()=>setActiveTab(id)}
+              className={`flex items-center gap-1.5 px-6 py-4 text-sm font-bold whitespace-nowrap transition-all border-b-[3px] ${activeTab===id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
+              {icon}{label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* メイン */}
+      {/* 注意: ここに transform を伴うアニメーション（fade-in など）を付けると
+          CSS スタッキングコンテキストが生成され、内部の fixed モーダル（z-50）が
+          sticky ヘッダー（z-50）に隠れてしまう。モーダルが正しく前面に出なく
+          なるため、main には transform 系のクラスを付けないこと。 */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+        {activeTab==='home'     && <HomeScreen  users={users} projects={projects} logs={logs} targets={targets} depts={depts} lastSync={lastSync} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onFetchMyInputStatus={fetchMyInputStatus}/>}
+        {activeTab==='input'    && <InputScreen users={users} projects={projects} logs={logs} workContents={workContents} targets={targets} lastLog={lastLog} onSave={handleSaveLog} currentUser={currentUser} presetDate={pendingInputDate} onPresetDateConsumed={()=>setPendingInputDate(null)}/>}
+        {activeTab==='analysis' && <AnalysisScreen logs={logs} users={users} projects={projects} targets={targets} depts={depts} workContents={workContents} totalLogs={totalLogs} rangeTotal={rangeTotal} loadedRange={loadedRange} onExpandRange={expandRange} onFetchLogsByRange={fetchLogsByRange} onFetchYoY={fetchYoY} onUpdate={handleUpdateLog} onDelete={handleDeleteLog} onUpdateTarget={handleUpdateTarget} onLoadMore={loadMoreLogs} currentUser={currentUser} isLeader={isLeader} onFetchTargetHistory={handleFetchTargetHistory}/>}
+        {activeTab==='settings' && isAdmin && <SettingsScreen users={users} depts={depts} projects={projects} workContents={workContents} onSaveUser={handleSaveUser} onDeleteUser={handleDeleteUser} onSaveWorkContents={handleSaveWorkContents} onAddDept={handleAddDept} onRenameDept={handleRenameDept} onDeleteDept={handleDeleteDept} onUpdateProject={handleUpdateProject} onResetPin={handleResetPin} currentUser={currentUser}/>}
+      </main>
+
+      {/* フッター（同期ステータス） */}
+      {lastSync && (
+        <footer className="border-t border-slate-200 bg-white py-2 px-4 text-[10px] text-slate-400 text-center">
+          最終同期: {lastSync.toLocaleTimeString('ja-JP')}（30秒ごとに自動更新）
+        </footer>
+      )}
+
+      {/* mid-session ローディングオーバーレイ
+          期変更で過去範囲を遡るなど、データ再取得中に画面ツリーを維持したまま
+          操作を一時ブロックするためのオーバーレイ。子コンポーネント（特に
+          SummaryScreen/AnalysisScreen）をアンマウントしないことで、期選択の
+          state が localStorage に書き込まれる前に失われるのを防ぐ。
+          フルスクリーンスピナーは初回ロード時のみ（上方で return 済み）。*/}
+      {isLoading && users.length > 0 && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/20 backdrop-blur-[1px] flex items-center justify-center pointer-events-auto">
+          <div className="bg-white rounded-xl shadow-2xl px-6 py-4 flex items-center gap-3 border border-slate-200">
+            <IRefresh s={20} c="animate-spin text-blue-600" />
+            <span className="text-sm font-bold text-slate-700">データを読み込み中...</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== ホーム: 入力状況パネル =====================
+// 自分の直近 7 営業日分の入力状況をドット表示し、
+// 未入力日があれば黄色バナーで警告する。
+//
+//   - 土日・祝日はサーバー側で除外済み（営業日のみ返ってくる）
+//   - 今日の入力がまだの場合はグレー（警告ではない）
+//   - 過去の営業日に入力が無い場合は黄色（警告）
+//   - 日付チップをクリックすると入力画面に遷移する
+//   - ホームに来るたびに再取得するので、ログイン長期維持でも鮮度が保てる
+function InputStatusPanel({ onFetchMyInputStatus, onNavigate }) {
+  const [data, setData]   = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr]     = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    const result = await onFetchMyInputStatus(7);
+    if (!result) {
+      setErr('取得に失敗しました');
+      setLoading(false);
+      return;
+    }
+    setData(result);
+    setErr(null);
+    setLoading(false);
+  }, [onFetchMyInputStatus]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  // 読み込み中は高さを潰さないために枠だけ出す
+  if (loading && !data) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <IRefresh s={14} c="animate-spin"/> 入力状況を確認中...
+        </div>
+      </div>
+    );
+  }
+  if (err || !data) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <p className="text-xs text-slate-400">入力状況を取得できませんでした</p>
+      </div>
+    );
+  }
+
+  const DOW_LABEL = ['日','月','火','水','木','金','土'];
+  const today     = data.today;
+  // 「過去の未入力日」（警告対象）と「今日の未入力」（リマインド）
+  const missingPast = data.days.filter(d => !d.logged && d.date <  today);
+  const todayCell   = data.days.find(d => d.date === today);
+  const todayUnset  = todayCell && !todayCell.logged;
+  const hasWarning  = missingPast.length > 0;
+
+  const loggedCount = data.days.filter(d => d.logged).length;
+  const totalCount  = data.days.length;
+
+  return (
+    <div className={`rounded-xl border shadow-sm overflow-hidden ${hasWarning ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+      {/* ヘッダー */}
+      <div className={`px-4 py-3 flex items-center justify-between ${hasWarning ? 'bg-amber-100/60' : 'bg-slate-50'}`}>
+        <div className="flex items-center gap-2">
+          <IChart s={14} c={hasWarning ? 'text-amber-700' : 'text-slate-600'}/>
+          <h3 className={`text-sm font-black ${hasWarning ? 'text-amber-900' : 'text-slate-700'}`}>
+            直近の入力状況（営業日ベース）
+          </h3>
+        </div>
+        <div className={`text-[11px] font-bold ${hasWarning ? 'text-amber-700' : 'text-slate-500'}`}>
+          {loggedCount} / {totalCount} 日 入力済み
+        </div>
+      </div>
+
+      {/* ドット列 */}
+      <div className="p-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          {data.days.map(d => {
+            const isToday = d.date === today;
+            const [y,m,day] = d.date.split('-');
+            const label = `${Number(m)}/${Number(day)}`;
+            const dow   = DOW_LABEL[d.dow];
+            // セルの色分け
+            //   ● 緑 = 入力済み
+            //   ⚠ 黄 = 過去の未入力（警告）
+            //   ○ グレー = 今日まだ未入力（リマインド）
+            let cellClass, iconNode, stateLabel;
+            if (d.logged) {
+              cellClass  = 'bg-emerald-100 border-emerald-300 text-emerald-800';
+              iconNode   = <span className="text-sm">●</span>;
+              stateLabel = `${d.hours}h`;
+            } else if (isToday) {
+              cellClass  = 'bg-slate-100 border-slate-300 text-slate-500';
+              iconNode   = <span className="text-sm">○</span>;
+              stateLabel = '本日';
+            } else {
+              cellClass  = 'bg-amber-100 border-amber-400 text-amber-800';
+              iconNode   = <span className="text-sm">⚠</span>;
+              stateLabel = '未入力';
+            }
+            return (
+              <button
+                key={d.date}
+                onClick={() => onNavigate('input', { date: d.date })}
+                title={`${d.date} (${dow}) — ${stateLabel}`}
+                className={`flex flex-col items-center justify-center w-14 h-16 rounded-lg border-2 transition-all hover:scale-105 hover:shadow ${cellClass} ${isToday ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}>
+                <div className="text-[10px] font-bold">{label}</div>
+                <div className="text-[9px] opacity-70">({dow})</div>
+                {iconNode}
+                <div className="text-[9px] font-bold">{stateLabel}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 警告メッセージ */}
+        {hasWarning && (
+          <div className="mt-4 pt-3 border-t border-amber-200">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-600 text-base leading-none mt-0.5">⚠</span>
+              <div className="flex-1">
+                <p className="text-xs font-black text-amber-900">
+                  以下の営業日に入力がありません（{missingPast.length}日）
+                </p>
+                <p className="text-[11px] text-amber-800 mt-1">
+                  {missingPast.map(d => {
+                    const [y,m,day] = d.date.split('-');
+                    const dow = DOW_LABEL[d.dow];
+                    return `${Number(m)}/${Number(day)}（${dow}）`;
+                  }).join(' 、 ')}
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate('input', { date: missingPast[0].date })}
+                className="text-[11px] font-black bg-amber-600 text-white hover:bg-amber-700 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors"
+                title={`${missingPast[0].date} を初期値として入力画面を開きます`}>
+                今すぐ入力
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 今日まだ未入力の場合の軽いリマインド（警告ではない） */}
+        {!hasWarning && todayUnset && (
+          <div className="mt-4 pt-3 border-t border-slate-200">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 text-base leading-none">○</span>
+              <p className="text-xs text-slate-600 flex-1">本日（{today.slice(5).replace('-','/')}）の入力はまだです</p>
+              <button
+                onClick={() => onNavigate('input')}
+                className="text-[11px] font-bold border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors">
+                入力画面へ
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 全部入力済みで今日も済んでいる場合は控えめなメッセージ */}
+        {!hasWarning && !todayUnset && (
+          <div className="mt-4 pt-3 border-t border-emerald-200">
+            <p className="text-xs text-emerald-700 font-bold flex items-center gap-2">
+              <span>✓</span>
+              直近{totalCount}営業日すべて入力済みです。お疲れさまです！
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== ホーム画面 =====================
+function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigate, currentUser, isAdmin, onFetchMyInputStatus }) {
+  const thisMonth = today().substring(0,7);
+  const totalH    = logs.reduce((s,l)=>s+Number(l.hours||0), 0);
+  const monthH    = logs.filter(l=>ym(l.date)===thisMonth).reduce((s,l)=>s+Number(l.hours||0), 0);
+  const activeProjects = projects.filter(p => !p.isClosed);
+
+  // 今週の集計（月曜〜今日）
+  const weekStart = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().split('T')[0];
+  }, []);
+  const weekH = logs.filter(l => l.date >= weekStart).reduce((s,l)=>s+Number(l.hours||0), 0);
+
+  // 今月の部署別集計
+  // ※ 記録時点の所属部署 (l.department) で集計する。
+  //    ユーザーが途中で異動しても、過去の記録は元の部署に帰属したまま集計される。
+  const deptMonthly = useMemo(() => {
+    const m = {};
+    depts.forEach(d => m[d] = 0);
+    logs.filter(l=>ym(l.date)===thisMonth).forEach(l => {
+      // 後方互換: l.department が無い古いデータは、現在の所属にフォールバック
+      const dept = l.department || users.find(u => u.id === l.userId)?.department;
+      if (dept && m[dept] !== undefined) m[dept] += Number(l.hours||0);
+    });
+    const max = Math.max(...Object.values(m), 1);
+    return Object.entries(m).map(([dept, h]) => ({ dept, h, pct: (h/max*100) }));
+  }, [logs, users, depts, thisMonth]);
+
+  // 今月の注番ランキング TOP 5
+  const topProjects = useMemo(() => {
+    const m = {};
+    logs.filter(l=>ym(l.date)===thisMonth).forEach(l => {
+      const key = l.projectNo || '__NO_PROJECT__';
+      m[key] = (m[key]||0) + Number(l.hours||0);
+    });
+    return Object.entries(m)
+      .map(([no, h]) => {
+        if (no === '__NO_PROJECT__') return { no:null, h, client:'注番なしの作業' };
+        return { no, h, client: projects.find(p=>p.no===no)?.client || '' };
+      })
+      .sort((a,b)=>b.h-a.h)
+      .slice(0,5);
+  }, [logs, projects, thisMonth]);
+
+  // 今月の担当者ランキング TOP 5
+  const topUsers = useMemo(() => {
+    const m = {};
+    logs.filter(l=>ym(l.date)===thisMonth).forEach(l => {
+      m[l.userId] = (m[l.userId]||0) + Number(l.hours||0);
+    });
+    return Object.entries(m)
+      .map(([uid, h]) => {
+        const u = users.find(u=>u.id===Number(uid));
+        return { name: u?.name || '不明', dept: u?.department || '', h };
+      })
+      .sort((a,b)=>b.h-a.h)
+      .slice(0,5);
+  }, [logs, users, thisMonth]);
+
+  // 出荷後対応比率（今月）
+  const monthLogs = logs.filter(l=>ym(l.date)===thisMonth);
+  const afterH = monthLogs.filter(l=>l.afterShipment).reduce((s,l)=>s+Number(l.hours||0), 0);
+  const afterPct = monthH > 0 ? (afterH/monthH*100) : 0;
+
+  const menus = [
+    { id:'input',    icon:<IEdit s={30}/>,  title:'入力画面',       desc:'日々の作業時間を記録',             color:'from-blue-500 to-blue-700',       border:'border-blue-200' },
+    { id:'analysis', icon:<IChart s={30}/>, title:'データ解析画面', desc:'一覧表示・集計・CSV出力',          color:'from-violet-500 to-violet-700',   border:'border-violet-200' },
+    ...(isAdmin ? [{ id:'settings', icon:<ICog s={30}/>,   title:'環境設定画面',   desc:'ユーザー・グループ・作業内容管理', color:'from-slate-600 to-slate-800',     border:'border-slate-200' }] : []),
+  ];
+
+  // 現在の期
+  const fyLabel = fiscalLabel(today());
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="text-center py-2">
+        <h2 className="text-2xl sm:text-3xl font-black text-slate-800">作業時間 一元管理システム</h2>
+        <p className="text-sm text-slate-500 mt-2">部署を超えて工数を統一管理 — 目標と実績を可視化</p>
+        <div className="mt-2 inline-flex items-center gap-2 bg-gradient-to-r from-blue-100 to-indigo-100 text-indigo-800 text-xs font-black px-4 py-1.5 rounded-full border border-indigo-200">
+          <IChart s={12}/>
+          現在: {fyLabel}（{new Date().getFullYear()}年{new Date().getMonth()+1}月）
+        </div>
+      </div>
+
+      {/* 入力忘れ防止パネル（直近7営業日の入力状況） */}
+      <InputStatusPanel onFetchMyInputStatus={onFetchMyInputStatus} onNavigate={onNavigate}/>
+
+      {/* サマリー */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        {[
+          { label:'登録ユーザー', val:users.length,            unit:'名', color:'text-blue-800',    bg:'bg-blue-50' },
+          { label:'グループ',     val:depts.length,            unit:'個', color:'text-sky-800',     bg:'bg-sky-50' },
+          { label:'進行中注番',   val:activeProjects.length,   unit:'件', color:'text-violet-800',  bg:'bg-violet-50' },
+          { label:'今週累計',     val:weekH.toFixed(1),        unit:'h', color:'text-indigo-800',  bg:'bg-indigo-50' },
+          { label:`${thisMonth} 累計`, val:monthH.toFixed(1),   unit:'h', color:'text-emerald-800', bg:'bg-emerald-50' },
+          { label:'出荷後比率',   val:afterPct.toFixed(0),     unit:'%', color:'text-rose-800',    bg:'bg-rose-50' },
+        ].map(({label,val,unit,color,bg}) => (
+          <div key={label} className={`${bg} rounded-xl p-3 border border-white`}>
+            <div className="text-[10px] font-bold text-slate-500 mb-1">{label}</div>
+            <div className={`text-xl font-black ${color}`}>{val}<span className="text-[10px] font-bold text-slate-400 ml-1">{unit}</span></div>
+          </div>
+        ))}
+      </div>
+
+      {/* メニューカード */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {menus.map(m => (
+          <button key={m.id} onClick={()=>onNavigate(m.id)}
+            className={`menu-card bg-white rounded-2xl p-5 border-2 ${m.border} shadow-sm text-left flex flex-col gap-3 hover:border-blue-400`}>
+            <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${m.color} text-white flex items-center justify-center shadow-lg`}>
+              {m.icon}
+            </div>
+            <div>
+              <div className="text-base font-black text-slate-800">{m.title}</div>
+              <div className="text-xs text-slate-500 mt-1">{m.desc}</div>
+            </div>
+            <div className="text-xs font-bold text-blue-600 mt-auto">開く →</div>
+          </button>
+        ))}
+      </div>
+
+      {/* 今月の分析 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* 部署別バー */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm md:col-span-1">
+          <div className="flex items-center gap-2 mb-4">
+            <IChart s={16} c="text-slate-500"/>
+            <h3 className="text-sm font-black text-slate-700">今月の部署別</h3>
+          </div>
+          <div className="space-y-2">
+            {deptMonthly.map(({dept, h, pct}) => (
+              <div key={dept}>
+                <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                  <span className="truncate">{dept}</span>
+                  <span>{h.toFixed(1)}h</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full bar-fill ${getDeptColor(dept).split(' ')[0].replace('bg-','bg-').replace('100','500')}`} style={{width:`${pct.toFixed(0)}%`}}/>
+                </div>
+              </div>
+            ))}
+            {deptMonthly.every(d=>d.h===0) && <p className="text-xs text-slate-400 text-center py-4">データなし</p>}
+          </div>
+        </div>
+
+        {/* 注番TOP5 */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <IFolder s={16} c="text-slate-500"/>
+            <h3 className="text-sm font-black text-slate-700">今月の注番TOP5</h3>
+          </div>
+          <div className="space-y-2">
+            {topProjects.map((p, i) => (
+              <div key={p.no || '__noproj__'} className="flex items-center gap-2 text-xs">
+                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black flex items-center justify-center flex-shrink-0">{i+1}</span>
+                {p.no ? (
+                  <>
+                    <span className="font-bold text-blue-700 flex-shrink-0">{p.no}</span>
+                    <span className="text-slate-400 truncate flex-1">{p.client}</span>
+                  </>
+                ) : (
+                  <span className="font-bold text-amber-700 truncate flex-1">注番なし</span>
+                )}
+                <span className="font-black text-slate-700">{p.h.toFixed(1)}h</span>
+              </div>
+            ))}
+            {topProjects.length===0 && <p className="text-xs text-slate-400 text-center py-4">データなし</p>}
+          </div>
+        </div>
+
+        {/* 担当者TOP5 */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <IUsers s={16} c="text-slate-500"/>
+            <h3 className="text-sm font-black text-slate-700">今月の担当者TOP5</h3>
+          </div>
+          <div className="space-y-2">
+            {topUsers.map((u, i) => (
+              <div key={u.name+i} className="flex items-center gap-2 text-xs">
+                <span className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-black flex items-center justify-center flex-shrink-0">{i+1}</span>
+                <span className="font-bold text-slate-700 flex-shrink-0">{u.name}</span>
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${getDeptColor(u.dept)}`}>{u.dept}</span>
+                <span className="font-black text-slate-700 ml-auto">{u.h.toFixed(1)}h</span>
+              </div>
+            ))}
+            {topUsers.length===0 && <p className="text-xs text-slate-400 text-center py-4">データなし</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* グループ一覧 */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <IUsers s={16} c="text-slate-500"/>
+          <h3 className="text-sm font-black text-slate-700">登録グループ</h3>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {depts.map(d => {
+            const cnt = users.filter(u=>u.department===d).length;
+            return (
+              <div key={d} className={`text-xs font-bold px-3 py-1.5 rounded-full ${getDeptColor(d)}`}>
+                {d} <span className="opacity-60">({cnt})</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== 入力画面 =====================
+function InputScreen({ users, projects, logs, workContents, targets, lastLog, onSave, currentUser, presetDate, onPresetDateConsumed }) {
+  // 担当者はログインユーザーに固定
+  const fixedUserId = currentUser ? String(currentUser.id) : '';
+  // マウント時に presetDate が渡されていれば、それを初期日付として使う。
+  // それ以外は本日（today()）。
+  //   例: ホーム画面の「入力忘れ」パネルで 4/10 のチップをクリック
+  //       → navigate('input', { date: '2026-04-10' })
+  //       → pendingInputDate が '2026-04-10' に
+  //       → InputScreen がマウント、初期 form.date が '2026-04-10' になる
+  //       → 下の useEffect が onPresetDateConsumed() を呼んで親の state を null に戻す
+  const initialDate = presetDate || today();
+  const blank = { userId: fixedUserId, date:initialDate, projectNo:'', content:'', hours:'', location:'社内', afterShipment:false, details:'', targetHours:'', isNewProject:false, newClient:'', newSubject:'', customContent:'' };
+  const [form, setForm]     = useState({ ...blank });
+  const [pInput, setPInput] = useState('');
+  const [showSug, setShowSug] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [hasProject, setHasProject] = useState(true); // 注番あり/なし
+  const sugRef = useRef(null);
+
+  // ログインユーザーが変わったら userId を同期（ログアウト/再ログイン時）
+  useEffect(() => {
+    setForm(prev => ({ ...prev, userId: fixedUserId }));
+  }, [fixedUserId]);
+
+  // presetDate を 1 回だけ消費する。マウント時に initialDate で
+  // 既に反映済みなので、ここでは親の state をクリアするだけ。
+  // これにより、次に入力画面を開いたときは通常の today() に戻る。
+  useEffect(() => {
+    if (presetDate && onPresetDateConsumed) {
+      onPresetDateConsumed();
+    }
+    // 初回マウント時のみ発火させたい（presetDate の変化で再実行しない）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const f = (patch) => setForm(prev => ({ ...prev, ...patch }));
+
+  // 前回の入力を再利用（担当者はログインユーザー固定）
+  //   NOTE: 日付は「現在フォームに入っている日付」をそのまま維持する。
+  //         当日に強制リセットしない理由:
+  //           - ホームの入力忘れパネルから 4/10 を指定して入力画面に
+  //             入ったときに、再利用を押した途端 4/15 に戻ってしまう
+  //             のを避けるため。
+  //           - 過去日の埋め戻し作業でも「前回の内容を流用して日付だけ
+  //             違う」という使い方をする想定。
+  const reuseLast = () => {
+    if (!lastLog) return;
+    const hadProj = !!lastLog.projectNo;
+    const p = hadProj ? projects.find(pr => pr.no === lastLog.projectNo) : null;
+    setHasProject(hadProj);
+    setForm(prev => ({
+      userId: fixedUserId,
+      date: prev.date,  // 現在の日付を維持
+      projectNo: lastLog.projectNo || '',
+      content: lastLog.content,
+      hours: String(lastLog.hours),
+      location: lastLog.location || '社内',
+      afterShipment: !!lastLog.afterShipment,
+      details: lastLog.details || '',
+      targetHours: '',
+      isNewProject: false,
+      newClient: p?.client || '',
+      newSubject: p?.subject || '',
+      customContent: ''
+    }));
+    setPInput(lastLog.projectNo || '');
+  };
+
+  // 選択中の担当者が「最近入力した注番」→ 直近の作業日を優先順位にする
+  const userRecentMap = useMemo(() => {
+    const map = {};
+    if (!form.userId) return map;
+    const uid = Number(form.userId);
+    (logs || []).forEach(l => {
+      if (l.userId !== uid) return;
+      if (!l.projectNo) return; // 注番なしのログは除外
+      const cur = map[l.projectNo];
+      if (!cur || l.date > cur) map[l.projectNo] = l.date;
+    });
+    return map;
+  }, [logs, form.userId]);
+
+  const filteredP = useMemo(() => {
+    const q = pInput.toLowerCase().trim();
+    const openProjects = projects.filter(p => !p.isClosed);
+    const userUsed = (p) => userRecentMap[p.no] || '';
+    const scored = (p) => {
+      // 1) 担当者が使用済み → 最近の日付（降順）
+      // 2) 未使用 → プロジェクトの lastUsed（降順）
+      const d = userUsed(p);
+      if (d) return `2_${d}`;         // 担当者の履歴あり（優先）
+      return `1_${p.lastUsed || 0}`;  // 履歴なし
+    };
+    const sortFn = (a, b) => scored(b).localeCompare(scored(a));
+    if (!q) return [...openProjects].sort(sortFn).slice(0, 15);
+    return openProjects.filter(p =>
+      p.no.toLowerCase().includes(q) ||
+      (p.client||'').toLowerCase().includes(q) ||
+      (p.subject||'').toLowerCase().includes(q)
+    ).sort(sortFn).slice(0, 15);
+  }, [pInput, projects, userRecentMap]);
+
+  const selectedUser = users.find(u => u.id === Number(form.userId));
+  const contents = selectedUser ? (workContents[selectedUser.department] || []) : [];
+  const isNewProject = hasProject && pInput && !projects.some(p => p.no === pInput);
+
+  // 目標時間が必要かどうか：注番ありモード＋担当者＋注番が確定しており、ProjectTargetsに未登録
+  const needsTarget = useMemo(() => {
+    if (!hasProject || !form.userId || !pInput) return false;
+    return !findTarget(targets, Number(form.userId), pInput);
+  }, [hasProject, form.userId, pInput, targets]);
+
+  const existingTarget = useMemo(() => {
+    if (!hasProject || !form.userId || !pInput) return null;
+    return findTarget(targets, Number(form.userId), pInput);
+  }, [hasProject, form.userId, pInput, targets]);
+
+  const selectProject = (p) => {
+    setPInput(p.no);
+    f({ projectNo: p.no, isNewProject: false, newClient: p.client, newSubject: p.subject });
+    setShowSug(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (hasProject && !pInput) return;
+    if (needsTarget && (!form.targetHours || Number(form.targetHours) <= 0)) {
+      alert('この注番は初めての入力です。目標時間を入力してください。');
+      return;
+    }
+    // 注番なしの場合は 内容詳細 必須
+    if (!hasProject && (!form.details || !form.details.trim())) {
+      alert('注番なしの作業記録は「内容詳細」の入力が必須です。');
+      return;
+    }
+    // 「その他」が選ばれていたら customContent を実際の内容として使用
+    const finalContent = form.content === '__OTHER__' ? (form.customContent || '').trim() : form.content;
+    if (!finalContent) {
+      alert('作業内容を入力してください。');
+      return;
+    }
+    setSubmitting(true);
+    const payload = {
+      ...form,
+      content: finalContent,
+      userId: Number(form.userId),
+      hours: Number(form.hours),
+      projectNo: hasProject ? pInput : null,
+      isNewProject: hasProject ? isNewProject : false,
+      newClient:  hasProject ? form.newClient  : '',
+      newSubject: hasProject ? form.newSubject : '',
+      targetHours: (hasProject && needsTarget) ? Number(form.targetHours) : undefined
+    };
+    const ok = await onSave(payload);
+    if (ok) { setForm({ ...blank, userId: form.userId, date: form.date }); setPInput(''); }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><IEdit s={20} c="text-blue-600"/> 作業記録を入力</h2>
+          {lastLog && (
+            <button type="button" onClick={reuseLast}
+              className="flex items-center gap-1.5 text-xs font-black text-blue-700 border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors">
+              <ICopy s={14}/> 前回の入力を再利用
+            </button>
+          )}
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 左列 */}
+            <div className="space-y-5">
+              {/* 担当者（ログインユーザー固定） */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-600 uppercase tracking-wider">担当者</label>
+                <div className="w-full border-2 border-slate-200 bg-slate-50 rounded-xl px-3 py-2.5 text-sm text-slate-700 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <IUser s={16} c="text-slate-400"/>
+                    {selectedUser ? selectedUser.name : (currentUser ? currentUser.name : '—')}
+                  </span>
+                  {selectedUser && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getDeptColor(selectedUser.department)}`}>{selectedUser.department}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 作業日 */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-600 uppercase tracking-wider">作業日 *</label>
+                <input type="date" required value={form.date} onChange={e=>f({ date:e.target.value })}
+                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none"/>
+              </div>
+
+              {/* 注番あり/なし トグル */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-600 uppercase tracking-wider">注番の有無 *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={()=>{ setHasProject(true); }}
+                    className={`px-3 py-2.5 rounded-xl text-sm font-black border-2 transition-all flex items-center justify-center gap-2 ${hasProject ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>
+                    <IFolder s={14}/> 注番あり
+                  </button>
+                  <button type="button" onClick={()=>{ setHasProject(false); setPInput(''); f({ projectNo:'', targetHours:'', isNewProject:false, newClient:'', newSubject:'' }); }}
+                    className={`px-3 py-2.5 rounded-xl text-sm font-black border-2 transition-all flex items-center justify-center gap-2 ${!hasProject ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-300'}`}>
+                    <IEdit s={14}/> 注番なし
+                  </button>
+                </div>
+                {!hasProject && (
+                  <p className="text-[10px] font-bold text-amber-600 flex items-center gap-1 mt-1">
+                    ⚠ 注番なしの場合、「内容詳細」の入力が必須になります
+                  </p>
+                )}
+              </div>
+
+              {/* 注番 */}
+              {hasProject && (
+              <div className="space-y-1.5 relative" ref={sugRef}>
+                <label className="text-xs font-black text-slate-600 uppercase tracking-wider">
+                  注番 *
+                  {!selectedUser && <span className="ml-2 text-[10px] font-bold text-amber-600 normal-case">← 先に担当者を選択してください</span>}
+                </label>
+                <div className="relative">
+                  <input type="text" required value={pInput} disabled={!selectedUser}
+                    onChange={e => { setPInput(e.target.value); f({ projectNo:e.target.value, targetHours:'' }); setShowSug(true); }}
+                    onFocus={() => setShowSug(true)}
+                    onBlur={() => setTimeout(()=>setShowSug(false), 200)}
+                    placeholder={selectedUser ? '注番 / 客先 / 件名 で絞り込み検索' : '担当者を選択すると入力できます'}
+                    className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 pr-9 text-sm focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"/>
+                  <ISearch s={16} c="absolute right-3 top-3 text-slate-400"/>
+                </div>
+
+                {showSug && selectedUser && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden slide-down">
+                    {filteredP.length > 0 && (
+                      <div className="max-h-60 overflow-y-auto">
+                        {(() => {
+                          const recent = filteredP.filter(p => userRecentMap[p.no]);
+                          const others = filteredP.filter(p => !userRecentMap[p.no]);
+                          return (
+                            <>
+                              {recent.length > 0 && (
+                                <>
+                                  <div className="px-3 py-1.5 text-[10px] font-black text-blue-600 uppercase tracking-wider bg-blue-50 border-b border-blue-100 flex items-center gap-1">
+                                    <IStar s={11}/> {selectedUser.name} さんの最近の注番
+                                  </div>
+                                  {recent.map(p => (
+                                    <div key={p.no} onMouseDown={()=>selectProject(p)}
+                                      className="flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 transition-colors bg-blue-50/30">
+                                      <div className="flex items-center gap-2">
+                                        <IStar s={11} c="text-blue-400"/>
+                                        <span className="font-black text-blue-700 text-sm">{p.no}</span>
+                                      </div>
+                                      <span className="text-xs text-slate-500 truncate max-w-[55%]">
+                                        {p.client} / {p.subject}
+                                        <span className="ml-2 text-[9px] text-blue-500 font-bold">最終 {fmtDate(userRecentMap[p.no])}</span>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                              {others.length > 0 && (
+                                <>
+                                  <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider bg-slate-50 border-b">
+                                    {recent.length > 0 ? 'その他の注番' : '登録済み注番'}
+                                  </div>
+                                  {others.map(p => (
+                                    <div key={p.no} onMouseDown={()=>selectProject(p)}
+                                      className="flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 transition-colors">
+                                      <span className="font-bold text-blue-700 text-sm">{p.no}</span>
+                                      <span className="text-xs text-slate-500 truncate max-w-[55%]">{p.client} / {p.subject}</span>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    {isNewProject && (
+                      <div className="px-3 py-2.5 bg-amber-50 border-t border-amber-100">
+                        <span className="text-xs font-black text-amber-700">⊕ 新規注番として登録：「{pInput}」</span>
+                      </div>
+                    )}
+                    {filteredP.length === 0 && !isNewProject && (
+                      <div className="px-3 py-4 text-center text-xs text-slate-400">一致する注番がありません</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              )}
+
+              {/* 新規注番フォーム */}
+              {hasProject && isNewProject && pInput && (
+                <div className="p-4 bg-amber-50 rounded-xl border-2 border-amber-200 space-y-3 fade-in">
+                  <p className="text-xs font-black text-amber-700 flex items-center gap-1.5">⚠ 新規注番です。客先と件名を入力してください</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-amber-700">客先名 *</label>
+                      <input required value={form.newClient} onChange={e=>f({ newClient:e.target.value })}
+                        placeholder="○○工業株式会社"
+                        className="w-full border-2 border-amber-200 rounded-lg px-2 py-1.5 text-sm focus:border-amber-400 outline-none bg-white"/>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-amber-700">件名 *</label>
+                      <input required value={form.newSubject} onChange={e=>f({ newSubject:e.target.value })}
+                        placeholder="△△制御盤製作"
+                        className="w-full border-2 border-amber-200 rounded-lg px-2 py-1.5 text-sm focus:border-amber-400 outline-none bg-white"/>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 目標時間 — 担当者×注番が初回のときのみ表示 */}
+              {needsTarget && (
+                <div className="p-4 bg-emerald-50 rounded-xl border-2 border-emerald-200 space-y-2 fade-in">
+                  <label className="text-xs font-black text-emerald-700 flex items-center gap-1.5">
+                    <ITarget s={14}/> この注番の目標時間（初回のみ必須）*
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input type="number" step="0.5" min="0.5" required value={form.targetHours}
+                      onChange={e=>f({ targetHours:e.target.value })}
+                      placeholder="例：40"
+                      className="w-32 border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm focus:border-emerald-400 outline-none bg-white font-bold"/>
+                    <span className="text-sm font-bold text-emerald-700">h</span>
+                    <span className="text-[10px] text-emerald-600 ml-2">あなたがこの注番で作業する目標時間を入力してください</span>
+                  </div>
+                </div>
+              )}
+              {existingTarget && !needsTarget && form.userId && pInput && (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 text-xs">
+                  <ITarget s={14} c="text-slate-500"/>
+                  <span className="font-bold text-slate-600">この注番の目標時間：</span>
+                  <span className="font-black text-slate-800">{fmtH(existingTarget.targetHours)}</span>
+                  <span className="text-slate-400">（設定済み）</span>
+                </div>
+              )}
+            </div>
+
+            {/* 右列 */}
+            <div className="space-y-5">
+              {/* 作業内容 */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-600 uppercase tracking-wider">作業内容 *</label>
+                <select required value={form.content} onChange={e=>f({ content:e.target.value, customContent:'' })} disabled={!selectedUser}
+                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none disabled:bg-slate-100 disabled:text-slate-400 transition-all">
+                  <option value="">{selectedUser ? '— 選択してください —' : '先に担当者を選んでください'}</option>
+                  {contents.map(c => <option key={c} value={c}>{c}</option>)}
+                  {selectedUser && <option value="__OTHER__">その他（フリー入力）</option>}
+                </select>
+                {form.content === '__OTHER__' && (
+                  <input type="text" required value={form.customContent} onChange={e=>f({ customContent:e.target.value })}
+                    placeholder="作業内容を自由に入力"
+                    className="w-full border-2 border-amber-300 bg-amber-50 rounded-xl px-3 py-2 text-sm focus:border-amber-400 outline-none mt-1.5"/>
+                )}
+              </div>
+
+              {/* 時間 / 場所 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-600 uppercase tracking-wider">時間（h） *</label>
+                  <input type="number" step="0.5" min="0.5" max="24" required value={form.hours} onChange={e=>f({ hours:e.target.value })}
+                    placeholder="例：3.5"
+                    className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none"/>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-600 uppercase tracking-wider">作業場所</label>
+                  <select value={form.location} onChange={e=>f({ location:e.target.value })}
+                    className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-blue-400 outline-none">
+                    <option value="社内">社内</option>
+                    <option value="社外">社外</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 出荷後対応 */}
+              <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-all">
+                <input type="checkbox" checked={form.afterShipment} onChange={e=>f({ afterShipment:e.target.checked })} className="w-5 h-5 rounded"/>
+                <span className="text-sm font-bold text-slate-700">出荷後対応に該当</span>
+                {form.afterShipment && <span className="ml-auto text-[10px] bg-red-100 text-red-700 font-black px-2 py-0.5 rounded-full">該当</span>}
+              </label>
+
+              {/* 内容詳細 */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-600 uppercase tracking-wider">
+                  内容詳細{!hasProject && <span className="text-amber-600 ml-1">*</span>}
+                  {!hasProject && <span className="ml-2 text-[10px] font-bold text-amber-600 normal-case">（注番なしの場合は必須）</span>}
+                </label>
+                <textarea value={form.details} onChange={e=>f({ details:e.target.value })} rows={4}
+                  required={!hasProject}
+                  placeholder={hasProject ? '作業の詳細を入力してください' : '注番なしの作業内容を具体的に入力してください'}
+                  className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:ring-4 outline-none resize-none ${!hasProject ? 'border-amber-300 bg-amber-50/50 focus:border-amber-400 focus:ring-amber-50' : 'border-slate-200 focus:border-blue-400 focus:ring-blue-50'}`}/>
+              </div>
+            </div>
+          </div>
+
+          {/* 送信ボタン */}
+          <div className="mt-8 pt-6 border-t border-slate-100">
+            <button type="submit" disabled={submitting}
+              className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-slate-400 text-white py-3.5 rounded-xl font-black text-base shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2">
+              {submitting ? <IRefresh s={20} c="animate-spin"/> : <ISave s={20}/>}
+              {submitting ? '登録中...' : '作業データを登録する'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ===================== データ解析画面（一覧 + 集計 タブ）=====================
+function AnalysisScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onFetchLogsByRange, onFetchYoY, onUpdate, onDelete, onUpdateTarget, onLoadMore, currentUser, isLeader, onFetchTargetHistory }) {
+  // NOTE: subTab は localStorage に永続化する（usePersistedState）。
+  //   親コンポーネント（App）は isLoading=true の間、画面全体を
+  //   ローディングスピナーに差し替えるため、AnalysisScreen が
+  //   アンマウント→再マウントされる。useState だと再マウントで
+  //   'list' に戻ってしまい、「集計画面で期を変更するとデータ一覧
+  //   タブに飛ばされる」バグになる。永続化することでアンマウントを
+  //   跨いで選択状態を維持する。
+  const [subTab, setSubTab] = usePersistedState('analysis.subTab', 'list');
+
+  return (
+    <div className="space-y-4">
+      {/* サブタブ */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex border-b border-slate-200">
+          {[
+            { id:'list',    icon:<IList s={16}/>,  label:'データ一覧' },
+            { id:'summary', icon:<IChart s={16}/>, label:'集計画面' },
+          ].map(({id,icon,label}) => (
+            <button key={id} onClick={()=>setSubTab(id)}
+              className={`flex items-center gap-2 px-6 py-3.5 text-sm font-bold transition-all border-b-2 ${subTab===id ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>
+              {icon}{label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {subTab==='list'    && <ListScreen    logs={logs} users={users} projects={projects} targets={targets} depts={depts} workContents={workContents} totalLogs={totalLogs} rangeTotal={rangeTotal} loadedRange={loadedRange} onExpandRange={onExpandRange} onUpdate={onUpdate} onDelete={onDelete} onLoadMore={onLoadMore}/>}
+      {subTab==='summary' && <SummaryScreen logs={logs} users={users} projects={projects} targets={targets} depts={depts} loadedRange={loadedRange} onExpandRange={onExpandRange} onFetchLogsByRange={onFetchLogsByRange} onFetchYoY={onFetchYoY} onUpdateTarget={onUpdateTarget} currentUser={currentUser} isLeader={isLeader} onFetchTargetHistory={onFetchTargetHistory}/>}
+    </div>
+  );
+}
+
+// ===================== データ一覧画面 =====================
+function ListScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onUpdate, onDelete, onLoadMore }) {
+  const [filter, setFilter] = usePersistedState('list.filter', { dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'' });
+  const [sort, setSort]     = usePersistedState('list.sort',   { key:'date', dir:'desc' });
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [expanding, setExpanding] = useState(false);
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
+    await onLoadMore(logs.length);
+    setLoadingMore(false);
+  };
+
+  const handleExpandRange = async (months) => {
+    if (!onExpandRange) return;
+    setExpanding(true);
+    await onExpandRange(months);
+    setExpanding(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const ok = await onDelete(deleteConfirm.id);
+    if (ok) setDeleteConfirm(null);
+  };
+
+  const ff = p => setFilter(prev => ({ ...prev, ...p }));
+  const deptUsers = filter.dept ? users.filter(u=>u.department===filter.dept) : users;
+
+  const filtered = useMemo(() => {
+    return logs.filter(l => {
+      if (filter.dateMode === 'single') {
+        if (filter.dateSingle && l.date !== filter.dateSingle) return false;
+      } else {
+        if (filter.dateFrom && l.date < filter.dateFrom) return false;
+        if (filter.dateTo   && l.date > filter.dateTo)   return false;
+      }
+      if (filter.userId   && l.userId !== Number(filter.userId)) return false;
+      if (filter.dept) {
+        // 記録時点の所属部署で絞り込む（異動後も過去の記録は元部署に属する）
+        const recDept = l.department || users.find(u=>u.id===l.userId)?.department;
+        if (recDept !== filter.dept) return false;
+      }
+      if (filter.projectNoMode === 'none') {
+        if (l.projectNo) return false; // 注番なしのみ
+      } else if (filter.projectNoMode === 'has') {
+        if (!l.projectNo) return false; // 注番ありのみ
+      }
+      if (filter.projectNo && filter.projectNoMode !== 'none') {
+        const q = filter.projectNo.toLowerCase();
+        if (!(l.projectNo || '').toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [logs, filter, users]);
+
+  // 担当者×注番ごとの実績合計
+  const userProjectActual = useMemo(() => {
+    const m = {};
+    logs.forEach(l => {
+      const k = `${l.userId}__${l.projectNo}`;
+      m[k] = (m[k]||0) + Number(l.hours||0);
+    });
+    return m;
+  }, [logs]);
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a,b) => {
+      let av = a[sort.key], bv = b[sort.key];
+      if (sort.key==='userName') { av = users.find(u=>u.id===a.userId)?.name||''; bv = users.find(u=>u.id===b.userId)?.name||''; }
+      if (sort.key==='target')   { av = findTarget(targets,a.userId,a.projectNo)?.targetHours||0; bv = findTarget(targets,b.userId,b.projectNo)?.targetHours||0; }
+      if (sort.key==='actual')   { av = userProjectActual[`${a.userId}__${a.projectNo}`]||0;    bv = userProjectActual[`${b.userId}__${b.projectNo}`]||0; }
+      if (av < bv) return sort.dir==='asc' ? -1 : 1;
+      if (av > bv) return sort.dir==='asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filtered, sort, users, targets, userProjectActual]);
+
+  const toggleSort = (key) => setSort(prev => ({ key, dir: prev.key===key && prev.dir==='asc' ? 'desc' : 'asc' }));
+
+  const SortIcon = ({ k }) => {
+    if (sort.key !== k) return <span className="text-slate-300 ml-1">↕</span>;
+    return <span className="text-blue-600 ml-1">{sort.dir==='asc' ? '↑' : '↓'}</span>;
+  };
+
+  const startEdit = (log) => {
+    const dept = log.department || users.find(u=>u.id===log.userId)?.department;
+    const deptContents = dept ? (workContents[dept]||[]) : [];
+    const isKnownContent = deptContents.includes(log.content);
+    setEditId(log.id);
+    setEditForm({ ...log, content: isKnownContent ? log.content : '__OTHER__', customContent: isKnownContent ? '' : log.content });
+  };
+  const cancelEdit = () => { setEditId(null); setEditForm({}); };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    const finalContent = editForm.content === '__OTHER__' ? (editForm.customContent || '').trim() : editForm.content;
+    if (!finalContent) {
+      alert('作業内容を入力してください。');
+      setSaving(false);
+      return;
+    }
+    const payload = { ...editForm, content: finalContent, hours: Number(editForm.hours) };
+    const ok = await onUpdate(payload);
+    if (ok) setEditId(null);
+    setSaving(false);
+  };
+
+  const editUser = users.find(u=>u.id===Number(editForm.userId));
+  // 編集時の作業内容候補は「記録時点の所属」優先（無ければユーザーの現所属にフォールバック）
+  const editDept = editForm.department || editUser?.department;
+  const editContents = editDept ? (workContents[editDept]||[]) : [];
+  const editOptions = editForm.content && editForm.content !== '__OTHER__' && !editContents.includes(editForm.content)
+    ? [editForm.content, ...editContents]
+    : editContents;
+
+  const Th = ({ k, label, right }) => (
+    <th className={`px-4 py-3 ${right?'text-right':'text-left'} text-xs font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap select-none`} onClick={()=>toggleSort(k)}>
+      {label}<SortIcon k={k}/>
+    </th>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* 読み込み範囲の表示と拡張 */}
+      {loadedRange && (
+        <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 shadow-sm flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-amber-900">
+            <IRefresh s={14}/>
+            <span className="font-black">表示範囲:</span>
+            <span className="font-bold">{loadedRange.from} 〜 {loadedRange.to}</span>
+            <span className="text-[10px] text-amber-600">
+              （この範囲内: {rangeTotal || logs.length} 件 / 全期間: {totalLogs} 件）
+            </span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[10px] text-slate-500">過去に遡る:</span>
+            {[1, 3, 6, 12].map(m => (
+              <button key={m} disabled={expanding}
+                onClick={()=>handleExpandRange(m)}
+                className="text-[10px] font-black border border-amber-300 bg-white hover:bg-amber-100 text-amber-800 px-2 py-1 rounded-md disabled:opacity-50 transition-colors">
+                {expanding ? '…' : `+${m}ヶ月`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* フィルターバー */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex items-center gap-2">
+            <ISearch s={16} c="text-slate-400"/>
+            <span className="text-xs font-black text-slate-500">絞り込み</span>
+          </div>
+          <select value={filter.dateMode || 'range'} onChange={e=>{
+              const mode = e.target.value;
+              if (mode === 'single') ff({ dateMode:'single', dateSingle: filter.dateSingle || today() });
+              else ff({ dateMode:'range' });
+            }}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="range">日付範囲</option>
+            <option value="single">単日</option>
+          </select>
+          {filter.dateMode === 'single' ? (
+            <div className="flex items-center gap-1">
+              <button type="button"
+                onClick={()=>ff({ dateSingle: shiftDate(filter.dateSingle || today(), -1) })}
+                title="前日"
+                className="border rounded-lg px-2 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 transition-colors">◀</button>
+              <input type="date" value={filter.dateSingle || ''} onChange={e=>ff({ dateSingle:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
+              <button type="button"
+                onClick={()=>ff({ dateSingle: shiftDate(filter.dateSingle || today(), +1) })}
+                title="翌日"
+                className="border rounded-lg px-2 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-100 transition-colors">▶</button>
+              <button type="button"
+                onClick={()=>ff({ dateSingle: today() })}
+                title="今日"
+                className="border rounded-lg px-2 py-1.5 text-[10px] font-bold text-blue-700 hover:bg-blue-50 transition-colors">今日</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={filter.dateFrom} onChange={e=>ff({ dateFrom:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
+              <span className="text-slate-400 text-xs">〜</span>
+              <input type="date" value={filter.dateTo} onChange={e=>ff({ dateTo:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
+            </div>
+          )}
+          <select value={filter.dept} onChange={e=>ff({ dept:e.target.value, userId:'' })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">全部署</option>
+            {depts.map(d=><option key={d} value={d}>{d}</option>)}
+          </select>
+          <select value={filter.userId} onChange={e=>ff({ userId:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">全担当者</option>
+            {deptUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select value={filter.projectNoMode || ''} onChange={e=>ff({ projectNoMode:e.target.value, projectNo: e.target.value==='none' ? '' : filter.projectNo })}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">注番すべて</option>
+            <option value="has">注番ありのみ</option>
+            <option value="none">注番なしのみ</option>
+          </select>
+          <input type="text" value={filter.projectNo} onChange={e=>ff({ projectNo:e.target.value })}
+            list="list-projects-datalist" placeholder="注番（部分一致）"
+            disabled={filter.projectNoMode==='none'}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 w-36 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"/>
+          <datalist id="list-projects-datalist">
+            {projects.map(p=><option key={p.no} value={p.no}>{p.client} / {p.subject}</option>)}
+          </datalist>
+          <button onClick={()=>{ setFilter({ dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'' }); clearPref('list.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
+          <div className="ml-auto text-xs font-bold text-slate-400">{sorted.length} 件</div>
+        </div>
+      </div>
+
+      {/* テーブル */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead className="bg-slate-50 border-b-2 border-slate-200">
+              <tr>
+                <Th k="date"      label="作業日"/>
+                <Th k="userName"  label="担当者"/>
+                <Th k="projectNo" label="注番"/>
+                <Th k="content"   label="作業内容"/>
+                <Th k="hours"     label="時間" right/>
+                <Th k="target"    label="目標" right/>
+                <Th k="actual"    label="実作業計" right/>
+                <Th k="location"  label="場所"/>
+                <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">出荷後</th>
+                <th className="px-4 py-3 text-xs font-black text-slate-500 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {sorted.map(l => {
+                const u = users.find(u=>u.id===l.userId);
+                const p = projects.find(p=>p.no===l.projectNo);
+                const isEdit = editId === l.id;
+                const target = findTarget(targets, l.userId, l.projectNo)?.targetHours;
+                const actual = userProjectActual[`${l.userId}__${l.projectNo}`]||0;
+                const progress = target ? (actual/target*100) : 0;
+                // 表示部署は「記録時点の所属」を優先（ユーザーが異動しても過去の記録は元部署として表示）
+                const recDept = l.department || u?.department || '';
+
+                if (isEdit) return (
+                  <tr key={l.id} className="bg-blue-50">
+                    <td className="px-4 py-2"><input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} className="border rounded px-2 py-1 text-xs w-32"/></td>
+                    <td className="px-4 py-2">
+                      <select value={editForm.userId} onChange={e=>setEditForm(f=>({...f,userId:Number(e.target.value),content:''}))} className="border rounded px-2 py-1 text-xs">
+                        {users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2"><span className="text-xs font-bold text-blue-700">{editForm.projectNo || <span className="text-amber-600">注番なし</span>}</span></td>
+                    <td className="px-4 py-2">
+                      <div className="space-y-2">
+                      <select value={editForm.content} onChange={e=>setEditForm(f=>({
+                        ...f,
+                        content:e.target.value,
+                        customContent: e.target.value === '__OTHER__' ? f.customContent : ''
+                      }))} className="border rounded px-2 py-1 text-xs w-full">
+                        {editOptions.map(c=><option key={c} value={c}>{c}</option>)}
+                        {editUser && <option value="__OTHER__">その他（フリー入力）</option>}
+                      </select>
+                      {editForm.content === '__OTHER__' && (
+                        <input type="text" value={editForm.customContent || ''} onChange={e=>setEditForm(f=>({...f,customContent:e.target.value}))}
+                          className="border rounded px-2 py-1 text-xs w-full"
+                          placeholder="作業内容を入力してください"/>
+                      )}
+                    </div>
+                    </td>
+                    <td className="px-4 py-2"><input type="number" step="0.5" value={editForm.hours} onChange={e=>setEditForm(f=>({...f,hours:e.target.value}))} className="border rounded px-2 py-1 text-xs w-16"/></td>
+                    <td className="px-4 py-2 text-right text-xs text-slate-400">{target?fmtH(target):'—'}</td>
+                    <td className="px-4 py-2 text-right text-xs text-slate-400">{fmtH(actual)}</td>
+                    <td className="px-4 py-2">
+                      <select value={editForm.location} onChange={e=>setEditForm(f=>({...f,location:e.target.value}))} className="border rounded px-2 py-1 text-xs">
+                        <option>社内</option><option>社外</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-2 text-center"><input type="checkbox" checked={!!editForm.afterShipment} onChange={e=>setEditForm(f=>({...f,afterShipment:e.target.checked}))}/></td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={saveEdit} disabled={saving} className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 flex items-center gap-1">
+                          {saving ? <IRefresh s={12} c="animate-spin"/> : <ICheck s={12}/>} 保存
+                        </button>
+                        <button onClick={cancelEdit} className="border px-2 py-1 rounded text-xs text-slate-500 hover:bg-slate-100"><IX s={12}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+                return (
+                  <tr key={l.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{fmtDateDow(l.date)}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-sm">{u?.name||'不明'}</div>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${getDeptColor(recDept)}`}>{recDept}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {l.projectNo ? (
+                        <>
+                          <div className="font-bold text-blue-700 text-sm">{l.projectNo}</div>
+                          <div className="text-[10px] text-slate-400 truncate max-w-[130px]">{p?.client}</div>
+                        </>
+                      ) : (
+                        <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">注番なし</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-sm">{l.content}</div>
+                      {l.details && <div className="text-[10px] text-slate-400 truncate max-w-[200px] italic mt-0.5">{l.details}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-right font-black text-slate-800 whitespace-nowrap">{fmtH(l.hours)}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {target ? <span className="text-xs font-bold text-emerald-700">{fmtH(target)}</span> : <span className="text-xs text-slate-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="text-xs font-bold text-slate-700">{fmtH(actual)}</div>
+                      {target && (
+                        <div className="w-16 ml-auto bg-slate-100 h-1 rounded-full overflow-hidden mt-0.5">
+                          <div className={`h-full ${progress>100?'bg-red-500':'bg-emerald-500'}`} style={{width:`${Math.min(progress,100).toFixed(0)}%`}}/>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${l.location==='社内' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{l.location}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {l.afterShipment && <span className="text-[10px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">該当</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <button onClick={()=>startEdit(l)} className="text-xs font-bold text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-2 py-1 rounded transition-colors">編集</button>
+                        <button onClick={()=>setDeleteConfirm(l)} className="text-xs font-bold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors">削除</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {sorted.length === 0 && (
+                <tr><td colSpan="10" className="py-16 text-center font-bold text-slate-300">表示するデータがありません</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* ページネーション */}
+        {logs.length < (totalLogs || 0) && (
+          <div className="p-4 border-t border-slate-100 bg-slate-50 text-center">
+            <button onClick={handleLoadMore} disabled={loadingMore}
+              className="bg-white border-2 border-blue-300 text-blue-700 hover:bg-blue-50 px-6 py-2 rounded-lg text-sm font-black transition-colors inline-flex items-center gap-2 disabled:opacity-50">
+              {loadingMore ? <IRefresh s={14} c="animate-spin"/> : <IRefresh s={14}/>}
+              もっと読み込む（残り {totalLogs - logs.length} 件）
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 削除確認モーダル */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={()=>setDeleteConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><ITrash s={22} c="text-red-600"/></div>
+              <div>
+                <h3 className="text-lg font-black text-slate-800">作業記録を削除</h3>
+                <p className="text-xs text-slate-500">この操作は取り消せません</p>
+              </div>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
+              <div><span className="text-slate-400 text-xs">作業日：</span><span className="font-bold">{fmtDate(deleteConfirm.date)}</span></div>
+              <div><span className="text-slate-400 text-xs">担当者：</span><span className="font-bold">{users.find(u=>u.id===deleteConfirm.userId)?.name||'不明'}</span></div>
+              <div><span className="text-slate-400 text-xs">注番　：</span>{deleteConfirm.projectNo ? <span className="font-bold text-blue-700">{deleteConfirm.projectNo}</span> : <span className="font-bold text-amber-700">注番なし</span>}</div>
+              <div><span className="text-slate-400 text-xs">作業　：</span><span className="font-bold">{deleteConfirm.content}（{fmtH(deleteConfirm.hours)}）</span></div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={()=>setDeleteConfirm(null)} className="border-2 border-slate-300 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50">キャンセル</button>
+              <button onClick={confirmDelete} className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 flex items-center gap-1"><ITrash s={14}/>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== 集計画面 =====================
+function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onExpandRange, onFetchLogsByRange, onFetchYoY, onUpdateTarget, currentUser, isLeader, onFetchTargetHistory }) {
+  const [filter, setFilter]  = usePersistedState('summary.filter',   { dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'' });
+  const [sortMode, setSortMode] = usePersistedState('summary.sortMode','hours_desc');
+  const [csvMode, setCsvMode]  = usePersistedState('summary.csvMode', 'basic');
+  const [editTarget, setEditTarget] = useState(null); // { userId, projectNo, value, reason }
+  const [savingTarget, setSavingTarget] = useState(false);
+  const [historyModal, setHistoryModal] = useState(null); // { userId, projectNo, userName, entries, loading }
+
+  // ---------- 会計年度（期）選択 ----------
+  // 現在の期を初期値にする
+  const currentFy   = getFiscalYear(today());
+  const currentHalf = getFiscalHalf(today());
+  const [fyMode, setFyMode]   = usePersistedState('summary.fyMode', 'custom'); // 'custom' | 'half' | 'full'
+  const [fySel,  setFySel]    = usePersistedState('summary.fySel',  { fy: currentFy, half: currentHalf });
+  const [yoyData, setYoyData] = useState(null); // { current, previous }
+  const [yoyLoading, setYoyLoading] = useState(false);
+
+  // 期選択が変わったらフィルターの dateFrom/dateTo を計算、必要なら過去ログをロード
+  const applyFiscalSelection = async (mode, sel) => {
+    if (mode === 'custom') return;
+    const [from, to] = mode === 'half'
+      ? fiscalHalfRange(sel.fy, sel.half)
+      : fiscalYearRange(sel.fy);
+    setFilter(prev => ({ ...prev, dateFrom: from, dateTo: to }));
+    // 読み込み済み範囲より過去に遡る場合はサーバーから取り直す
+    if (loadedRange && from < loadedRange.from && onExpandRange) {
+      // loadedRange.from 〜 from の差分月数ぶん広げる
+      const [ly, lm] = loadedRange.from.split('-').map(Number);
+      const [fy2, fm] = from.split('-').map(Number);
+      const diffMonths = (ly - fy2) * 12 + (lm - fm);
+      if (diffMonths > 0) await onExpandRange(diffMonths);
+    }
+  };
+
+  // 前年同期比較を取得
+  const loadYoY = async (from, to) => {
+    if (!from || !to || !onFetchYoY) return;
+    setYoyLoading(true);
+    const data = await onFetchYoY(from, to);
+    setYoyData(data);
+    setYoyLoading(false);
+  };
+
+  const startEditTarget = (userId, projectNo, current) => setEditTarget({ userId, projectNo, value: current ? String(current) : '', reason: '' });
+  const cancelEditTarget = () => setEditTarget(null);
+  const saveTargetEdit = async () => {
+    if (!editTarget) return;
+    const v = Number(editTarget.value);
+    if (!(v > 0)) { alert('0より大きい値を入力してください'); return; }
+    // 既存目標の変更には理由が必須
+    const isUpdate = !!findTarget(targets, editTarget.userId, editTarget.projectNo);
+    if (isUpdate && (!editTarget.reason || !editTarget.reason.trim())) {
+      alert('目標時間を変更する理由を入力してください');
+      return;
+    }
+    setSavingTarget(true);
+    const ok = await onUpdateTarget(editTarget.userId, editTarget.projectNo, v, (editTarget.reason || '').trim());
+    if (ok) setEditTarget(null);
+    setSavingTarget(false);
+  };
+
+  const openHistory = async (userId, projectNo, userName) => {
+    setHistoryModal({ userId, projectNo, userName, entries: null, loading: true });
+    const entries = await onFetchTargetHistory(userId, projectNo);
+    setHistoryModal(h => h ? { ...h, entries: entries || [], loading: false } : null);
+  };
+  const closeHistory = () => setHistoryModal(null);
+
+  const ff = p => setFilter(prev => ({ ...prev, ...p }));
+  const deptUsers = filter.dept ? users.filter(u=>u.department===filter.dept) : users;
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(l => {
+      if (filter.dateFrom && l.date < filter.dateFrom) return false;
+      if (filter.dateTo   && l.date > filter.dateTo)   return false;
+      if (filter.userId   && l.userId !== Number(filter.userId)) return false;
+      if (filter.dept) {
+        // 記録時点の所属部署で絞り込む（異動後も過去の記録は元部署に属する）
+        const recDept = l.department || users.find(u=>u.id===l.userId)?.department;
+        if (recDept !== filter.dept) return false;
+      }
+      if (filter.projectNoMode === 'none') {
+        if (l.projectNo) return false; // 注番なしのみ
+      } else if (filter.projectNoMode === 'has') {
+        if (!l.projectNo) return false; // 注番ありのみ
+      }
+      if (filter.projectNo && filter.projectNoMode !== 'none') {
+        const q = filter.projectNo.toLowerCase();
+        if (!(l.projectNo || '').toLowerCase().includes(q)) return false;
+      }
+      if (filter.location && l.location !== filter.location) return false;
+      return true;
+    });
+  }, [logs, filter, users]);
+
+  const summaryData = useMemo(() => {
+    const map = {};
+    filteredLogs.forEach(l => {
+      const key = l.projectNo || '__NO_PROJECT__';
+      if (!map[key]) map[key] = { no: l.projectNo, total: 0, users: {} };
+      map[key].total += Number(l.hours||0);
+      if (!map[key].users[l.userId]) map[key].users[l.userId] = 0;
+      map[key].users[l.userId] += Number(l.hours||0);
+    });
+    const arr = Object.values(map).map(p => {
+      const userEntries = Object.entries(p.users).map(([uid,h]) => ({ uid:Number(uid), h })).sort((a,b)=>b.h-a.h);
+      const totalTarget = p.no ? userEntries.reduce((s,u)=>s+(findTarget(targets,u.uid,p.no)?.targetHours||0), 0) : 0;
+      return { ...p, userEntries, totalTarget };
+    });
+    const noStr = (p) => p.no || '\uffff'; // 注番なしは末尾
+    if (sortMode==='hours_desc') arr.sort((a,b)=>b.total-a.total);
+    else if (sortMode==='hours_asc') arr.sort((a,b)=>a.total-b.total);
+    else if (sortMode==='no_asc') arr.sort((a,b)=>noStr(a).localeCompare(noStr(b)));
+    else if (sortMode==='no_desc') arr.sort((a,b)=>noStr(b).localeCompare(noStr(a)));
+    return arr;
+  }, [filteredLogs, users, targets, sortMode]);
+
+  const totalH     = summaryData.reduce((s,d)=>s+d.total, 0);
+  const totalTgt   = summaryData.reduce((s,d)=>s+d.totalTarget, 0);
+  const totalAfter = filteredLogs.filter(l=>l.afterShipment).reduce((s,l)=>s+Number(l.hours||0), 0);
+  const totalOut   = filteredLogs.filter(l=>l.location==='社外').reduce((s,l)=>s+Number(l.hours||0), 0);
+
+  const exportCSV = () => {
+    let csv = '', fname = '';
+    const NP = '(注番なし)';
+    if (csvMode==='basic') {
+      csv = '注番,客先,件名,合計時間(h)\n';
+      summaryData.forEach(s => {
+        const p = s.no ? (projects.find(p=>p.no===s.no)||{}) : {};
+        const noLabel = s.no || NP;
+        csv += `"${noLabel}","${p.client||''}","${p.subject||''}",${s.total.toFixed(1)}\n`;
+      });
+      fname = `作業集計_基本_${today()}.csv`;
+    } else if (csvMode==='monthly') {
+      csv = '対象月,注番,客先,件名,合計時間(h)\n';
+      const map = {};
+      filteredLogs.forEach(l => {
+        const m = ym(l.date);
+        const pno = l.projectNo || '__NO_PROJECT__';
+        const k = `${m}__${pno}`;
+        if (!map[k]) {
+          const p = l.projectNo ? (projects.find(p=>p.no===l.projectNo)||{}) : {};
+          map[k] = { m, no:l.projectNo, client:p.client||'', subject:p.subject||'', h:0 };
+        }
+        map[k].h += Number(l.hours||0);
+      });
+      const noKey = r => r.no || '\uffff';
+      Object.values(map).sort((a,b)=>a.m.localeCompare(b.m)||noKey(a).localeCompare(noKey(b))).forEach(r => {
+        const noLabel = r.no || NP;
+        csv += `"${ymJP(r.m)}","${noLabel}","${r.client}","${r.subject}",${r.h.toFixed(1)}\n`;
+      });
+      fname = `作業集計_月別_${today()}.csv`;
+    } else if (csvMode==='target') {
+      csv = '担当者,部署,注番,客先,件名,目標時間(h),実作業時間(h),差(h),達成率(%)\n';
+      // (担当者 × 注番) 単位
+      const map = {};
+      filteredLogs.forEach(l => {
+        const pno = l.projectNo || '__NO_PROJECT__';
+        const k = `${l.userId}__${pno}`;
+        if (!map[k]) {
+          const u = users.find(u=>u.id===l.userId)||{};
+          const p = l.projectNo ? (projects.find(p=>p.no===l.projectNo)||{}) : {};
+          const t = l.projectNo ? findTarget(targets, l.userId, l.projectNo) : null;
+          // 部署は記録時点の所属（l.department）を優先し、無ければ現在の所属にフォールバック
+          map[k] = { name:u.name||'不明', dept:(l.department || u.department || ''), no:l.projectNo, client:p.client||'', subject:p.subject||'', target:t?Number(t.targetHours):0, actual:0 };
+        }
+        map[k].actual += Number(l.hours||0);
+      });
+      const noKey = r => r.no || '\uffff';
+      Object.values(map).sort((a,b)=>noKey(a).localeCompare(noKey(b))||a.name.localeCompare(b.name)).forEach(r => {
+        const diff = (r.actual - r.target).toFixed(1);
+        const rate = r.target>0 ? (r.actual/r.target*100).toFixed(1) : '';
+        const noLabel = r.no || NP;
+        csv += `"${r.name}","${r.dept}","${noLabel}","${r.client}","${r.subject}",${r.target.toFixed(1)},${r.actual.toFixed(1)},${diff},${rate}\n`;
+      });
+      fname = `作業集計_目標対比_${today()}.csv`;
+    } else {
+      csv = '作業日,担当者,部署,注番,客先,件名,作業内容,時間(h),場所,出荷後対応,内容詳細\n';
+      filteredLogs.forEach(l => {
+        const u = users.find(u=>u.id===l.userId)||{};
+        const p = l.projectNo ? (projects.find(p=>p.no===l.projectNo)||{}) : {};
+        const noLabel = l.projectNo || NP;
+        // 部署は記録時点の所属（l.department）を優先
+        const recDept = l.department || u.department || '';
+        csv += `"${l.date}","${u.name||''}","${recDept}","${noLabel}","${p.client||''}","${p.subject||''}","${l.content}",${Number(l.hours||0).toFixed(1)},"${l.location}","${l.afterShipment?'該当':''}","${(l.details||'').replace(/"/g,'""')}"\n`;
+      });
+      fname = `作業集計_明細_${today()}.csv`;
+    }
+    downloadCSV(csv, fname);
+  };
+
+  const COLORS = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-cyan-500','bg-pink-500','bg-lime-500'];
+
+  // 期選択の候補（過去 5 期 + 次期）
+  const fyOptions = useMemo(() => {
+    const arr = [];
+    for (let i = currentFy + 1; i >= currentFy - 5; i--) arr.push(i);
+    return arr;
+  }, [currentFy]);
+
+  return (
+    <div className="space-y-4">
+      {/* 会計年度（期）選択バー */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-blue-900">会計年度（期）</span>
+            <span className="text-[10px] text-slate-500">9月〜翌8月</span>
+          </div>
+          <div className="flex items-center gap-1 bg-white rounded-lg p-1 border border-blue-200">
+            {[
+              { id: 'custom', label: '手動' },
+              { id: 'half',   label: '半期' },
+              { id: 'full',   label: '通年' },
+            ].map(({id,label}) => (
+              <button key={id} onClick={() => { setFyMode(id); applyFiscalSelection(id, fySel); }}
+                className={`text-[11px] font-black px-3 py-1.5 rounded-md transition-colors ${fyMode===id ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {fyMode !== 'custom' && (
+            <>
+              <select value={fySel.fy}
+                onChange={e=>{ const sel={...fySel, fy:Number(e.target.value)}; setFySel(sel); applyFiscalSelection(fyMode, sel); }}
+                className="border rounded-lg px-2 py-1.5 text-xs font-bold outline-none focus:border-blue-400">
+                {fyOptions.map(fy => <option key={fy} value={fy}>{fy}期</option>)}
+              </select>
+              {fyMode === 'half' && (
+                <div className="flex items-center gap-1 bg-white rounded-lg p-1 border border-blue-200">
+                  {[
+                    { id: 'H1', label: '前期(9-2月)' },
+                    { id: 'H2', label: '後期(3-8月)' },
+                  ].map(({id,label}) => (
+                    <button key={id} onClick={()=>{ const sel={...fySel, half:id}; setFySel(sel); applyFiscalSelection('half', sel); }}
+                      className={`text-[10px] font-black px-2 py-1 rounded-md transition-colors ${fySel.half===id ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="text-xs font-black text-indigo-800 bg-white rounded-full px-3 py-1 border border-indigo-200">
+                {fyMode === 'half'
+                  ? `${fySel.fy}期${fySel.half==='H1'?'前期':'後期'}`
+                  : `${fySel.fy}期 通年`}
+              </div>
+            </>
+          )}
+          <button
+            onClick={()=>loadYoY(filter.dateFrom, filter.dateTo)}
+            disabled={!filter.dateFrom || !filter.dateTo || yoyLoading}
+            className="ml-auto text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+            {yoyLoading ? <IRefresh s={12} c="animate-spin"/> : <IChart s={12}/>}
+            前年同期比較
+          </button>
+        </div>
+        {fyMode === 'custom' && (
+          <p className="text-[10px] text-slate-500 mt-2">※ 手動モードでは下のフィルターの「期間」を使います</p>
+        )}
+      </div>
+
+      {/* 前年同期比較パネル */}
+      {yoyData && (() => {
+        // サーバーは byDept を [{dept, hours}, ...] の配列で返す
+        const curDeptMap  = Object.fromEntries((yoyData.current?.byDept  || []).map(r => [r.dept, Number(r.hours||0)]));
+        const prevDeptMap = Object.fromEntries((yoyData.previous?.byDept || []).map(r => [r.dept, Number(r.hours||0)]));
+        const deptNames   = Array.from(new Set([...Object.keys(curDeptMap), ...Object.keys(prevDeptMap)])).sort();
+        const curRange  = yoyData.current?.range  || {};
+        const prevRange = yoyData.previous?.range || {};
+        return (
+          <div className="bg-white rounded-xl border border-indigo-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <IChart s={18} c="text-indigo-600"/>
+                <h3 className="text-sm font-black text-slate-700">前年同期比較</h3>
+                <span className="text-[10px] text-slate-400">
+                  今期: {curRange.from || '-'} 〜 {curRange.to || '-'} ／
+                  前期: {prevRange.from || '-'} 〜 {prevRange.to || '-'}
+                </span>
+              </div>
+              <button onClick={()=>setYoyData(null)} className="text-slate-400 hover:text-slate-700"><IX s={14}/></button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { key:'totalHours',   label:'総作業時間', fmt:v=>`${Number(v||0).toFixed(1)}h` },
+                { key:'logCount',     label:'登録件数',   fmt:v=>`${Number(v||0)}件` },
+                { key:'projectCount', label:'注番数',     fmt:v=>`${Number(v||0)}件` },
+                { key:'afterHours',   label:'出荷後対応', fmt:v=>`${Number(v||0).toFixed(1)}h` },
+              ].map(({key,label,fmt}) => {
+                const cur  = Number(yoyData.current?.[key]  || 0);
+                const prev = Number(yoyData.previous?.[key] || 0);
+                const diff = cur - prev;
+                const rate = prev > 0 ? (diff / prev * 100) : (cur > 0 ? 100 : 0);
+                const up = diff > 0;
+                return (
+                  <div key={key} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                    <div className="text-[10px] font-bold text-slate-500 mb-1">{label}</div>
+                    <div className="text-lg font-black text-slate-800">{fmt(cur)}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">前年: {fmt(prev)}</div>
+                    <div className={`text-[10px] font-black mt-1 ${up ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                      {up ? '▲' : diff < 0 ? '▼' : '—'} {diff === 0 ? '±0' : (up ? '+' : '') + diff.toFixed(1)}
+                      {prev > 0 && <span className="ml-1">({(up?'+':'')}{rate.toFixed(1)}%)</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {deptNames.length > 0 && (
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <div className="text-[10px] font-bold text-slate-500 mb-2">部署別 前年比</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {deptNames.map(dept => {
+                    const cur  = curDeptMap[dept]  || 0;
+                    const prev = prevDeptMap[dept] || 0;
+                    const diff = cur - prev;
+                    const up = diff > 0;
+                    return (
+                      <div key={dept} className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 rounded-md px-2 py-1 border border-slate-100">
+                        <span className={`font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${getDeptColor(dept)}`}>{dept}</span>
+                        <span className="font-black text-slate-700 ml-auto">{cur.toFixed(1)}h</span>
+                        <span className="text-[10px] text-slate-400">前年 {prev.toFixed(1)}h</span>
+                        <span className={`text-[10px] font-black ${up ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                          {up ? '▲' : diff < 0 ? '▼' : '—'}{diff === 0 ? '±0' : (up ? '+' : '') + diff.toFixed(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* フィルターバー */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <ISearch s={16} c="text-slate-400 mt-1"/>
+          <div className="flex items-center gap-1.5">
+            <input type="date" value={filter.dateFrom} onChange={e=>ff({ dateFrom:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
+            <span className="text-slate-400 text-xs">〜</span>
+            <input type="date" value={filter.dateTo} onChange={e=>ff({ dateTo:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
+          </div>
+          <select value={filter.dept} onChange={e=>ff({ dept:e.target.value, userId:'' })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">全部署</option>
+            {depts.map(d=><option key={d} value={d}>{d}</option>)}
+          </select>
+          <select value={filter.userId} onChange={e=>ff({ userId:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">全担当者</option>
+            {deptUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select value={filter.projectNoMode || ''} onChange={e=>ff({ projectNoMode:e.target.value, projectNo: e.target.value==='none' ? '' : filter.projectNo })}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">注番すべて</option>
+            <option value="has">注番ありのみ</option>
+            <option value="none">注番なしのみ</option>
+          </select>
+          <input type="text" value={filter.projectNo} onChange={e=>ff({ projectNo:e.target.value })}
+            list="summary-projects-datalist" placeholder="注番（部分一致）"
+            disabled={filter.projectNoMode==='none'}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 w-36 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"/>
+          <datalist id="summary-projects-datalist">
+            {projects.map(p=><option key={p.no} value={p.no}>{p.client} / {p.subject}</option>)}
+          </datalist>
+          <select value={filter.location || ''} onChange={e=>ff({ location:e.target.value })}
+            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+            <option value="">場所すべて</option>
+            <option value="社内">社内のみ</option>
+            <option value="社外">社外のみ</option>
+          </select>
+          <button onClick={()=>{ setFilter({ dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'' }); clearPref('summary.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500">並び替え：</label>
+            <select value={sortMode} onChange={e=>setSortMode(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
+              <option value="hours_desc">合計時間（多い順）</option>
+              <option value="hours_asc">合計時間（少ない順）</option>
+              <option value="no_asc">注番（A-Z）</option>
+              <option value="no_desc">注番（Z-A）</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* サマリーカード */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label:'総作業時間', val:`${totalH.toFixed(1)}h`,   color:'text-blue-900',    bg:'bg-blue-50' },
+          { label:'総目標時間', val:`${totalTgt.toFixed(1)}h`, color:'text-emerald-800', bg:'bg-emerald-50' },
+          { label:'出荷後対応', val:`${totalAfter.toFixed(1)}h`, color:'text-red-700',   bg:'bg-red-50' },
+          { label:'社外作業',   val:`${totalOut.toFixed(1)}h`,   color:'text-amber-700', bg:'bg-amber-50' },
+        ].map(({ label, val, color, bg }) => (
+          <div key={label} className={`${bg} rounded-xl p-4 border border-white`}>
+            <div className="text-xs font-bold text-slate-500 mb-1">{label}</div>
+            <div className={`text-2xl font-black ${color}`}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* CSV出力 */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-wrap items-center gap-4">
+        <IDl s={18} c="text-slate-500"/>
+        <span className="text-xs font-black text-slate-600">CSV出力：</span>
+        {[
+          { id:'basic',   label:'基本（注番・客先・合計）' },
+          { id:'monthly', label:'月ごとにまとめる' },
+          { id:'target',  label:'目標vs実績（担当者×注番）' },
+          { id:'detail',  label:'明細を出力' },
+        ].map(({ id, label }) => (
+          <label key={id} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-600">
+            <input type="radio" name="csvMode" value={id} checked={csvMode===id} onChange={()=>setCsvMode(id)} className="accent-blue-600"/>
+            {label}
+          </label>
+        ))}
+        <button onClick={exportCSV} className="ml-auto bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-700 flex items-center gap-1.5 transition-colors">
+          <IDl s={14}/> ダウンロード
+        </button>
+      </div>
+
+      {/* 注番別カード */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {summaryData.map((s) => {
+          const p = s.no ? (projects.find(p=>p.no===s.no)||{}) : {};
+          const noProject = !s.no;
+          return (
+            <div key={s.no || '__noproj__'} className={`rounded-xl border shadow-sm hover:shadow-md transition-shadow p-5 ${noProject ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+              <div className={`flex justify-between items-start border-b pb-3 mb-4 ${noProject ? 'border-amber-200' : 'border-slate-100'}`}>
+                <div className="max-w-[70%]">
+                  {noProject ? (
+                    <div className="text-base font-black text-amber-700 flex items-center gap-1.5">
+                      <IEdit s={14}/> 注番なしの作業
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-base font-black text-blue-800">{s.no}</div>
+                      <div className="text-xs text-slate-500 mt-0.5 truncate">{p.client} {p.subject && `/ ${p.subject}`}</div>
+                    </>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="text-xl font-black text-slate-900">{s.total.toFixed(1)}<span className="text-xs font-bold text-slate-400 ml-0.5">h</span></div>
+                  {s.totalTarget > 0 && (
+                    <div className="text-[10px] font-bold text-emerald-600">目標 {s.totalTarget.toFixed(1)}h</div>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-3">
+                {s.userEntries.map(({uid, h}, i) => {
+                  const user   = users.find(u=>u.id===uid);
+                  const name   = user?.name || '不明';
+                  const target = s.no ? findTarget(targets, uid, s.no)?.targetHours : null;
+                  const diff   = target ? (h - target) : null;
+                  const rate   = target ? (h/target*100) : null;
+                  const isEditingT = editTarget && editTarget.userId === uid && editTarget.projectNo === s.no;
+                  return (
+                    <div key={uid}>
+                      <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                        <span>{name}</span>
+                        <span className="flex items-center gap-2">
+                          {noProject ? (
+                            <span className="text-[10px] text-amber-600">目標対象外</span>
+                          ) : isEditingT ? (
+                            <span className="flex items-center gap-1">
+                              <input type="number" step="0.5" min="0.5" value={editTarget.value}
+                                onChange={e=>setEditTarget(t=>({...t,value:e.target.value}))}
+                                className="w-16 border border-emerald-300 rounded px-1.5 py-0.5 text-[10px] outline-none focus:border-emerald-500"/>
+                              <button onClick={saveTargetEdit} disabled={savingTarget} className="text-emerald-700 hover:bg-emerald-50 rounded px-1"><ICheck s={12}/></button>
+                              <button onClick={cancelEditTarget} className="text-slate-400 hover:bg-slate-100 rounded px-1"><IX s={12}/></button>
+                            </span>
+                          ) : isLeader ? (
+                            <span className="flex items-center gap-1">
+                              <button type="button" onClick={()=>startEditTarget(uid, s.no, target)}
+                                className="text-[10px] text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded px-1 flex items-center gap-1" title="目標時間を編集">
+                                <IEdit s={10}/>
+                                {target ? `目標 ${target.toFixed(1)}h` : '目標未設定'}
+                              </button>
+                              {target && (
+                                <button type="button" onClick={()=>openHistory(uid, s.no, name)}
+                                  className="text-[10px] text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded px-1" title="変更履歴を見る">
+                                  履歴
+                                </button>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 flex items-center gap-1" title="目標時間の変更はリーダー・管理者のみ">
+                              <ILock s={9}/>
+                              {target ? `目標 ${target.toFixed(1)}h` : '目標未設定'}
+                            </span>
+                          )}
+                          <span>{h.toFixed(1)}h</span>
+                        </span>
+                      </div>
+                      {isEditingT && findTarget(targets, uid, s.no) && (
+                        <div className="mt-1.5 mb-2 bg-emerald-50 border border-emerald-200 rounded-lg p-2 space-y-1">
+                          <label className="text-[10px] font-black text-emerald-800">変更理由 *（監査ログに記録されます）</label>
+                          <input type="text" value={editTarget.reason || ''}
+                            onChange={e=>setEditTarget(t=>({...t,reason:e.target.value}))}
+                            placeholder="例：初期見積もりの変更"
+                            className="w-full border border-emerald-300 rounded px-2 py-1 text-[11px] outline-none focus:border-emerald-500"/>
+                        </div>
+                      )}
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full bar-fill ${target ? (rate>100?'bg-red-500':'bg-emerald-500') : COLORS[i % COLORS.length]}`}
+                             style={{ width:`${target ? Math.min(rate,100).toFixed(1) : (h/s.total*100).toFixed(1)}%` }}/>
+                      </div>
+                      {target && (
+                        <div className="flex justify-end text-[10px] font-bold mt-0.5">
+                          <span className={diff>0 ? 'text-red-600' : 'text-emerald-600'}>
+                            {diff>0?'+':''}{diff.toFixed(1)}h（達成率 {rate.toFixed(0)}%）
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {summaryData.length === 0 && (
+          <div className="md:col-span-2 py-16 text-center font-bold text-slate-300">集計データがありません</div>
+        )}
+      </div>
+
+      {/* 変更履歴モーダル */}
+      {historyModal && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
+              <div>
+                <h3 className="text-base font-black text-slate-800">目標時間 変更履歴</h3>
+                <p className="text-xs text-slate-500">{historyModal.userName} ／ 注番 {historyModal.projectNo}</p>
+              </div>
+              <button onClick={closeHistory} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full w-8 h-8 flex items-center justify-center">
+                <IX s={18}/>
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              {historyModal.loading ? (
+                <div className="py-10 text-center"><IRefresh s={24} c="animate-spin text-blue-600 mx-auto"/></div>
+              ) : (historyModal.entries || []).length === 0 ? (
+                <p className="text-center text-sm text-slate-400 py-10">履歴がありません</p>
+              ) : (
+                <div className="space-y-2">
+                  {historyModal.entries.map(e => (
+                    <div key={e.id} className="border border-slate-200 rounded-xl p-3 text-xs">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="font-bold text-slate-700">{e.changedAt}</div>
+                        <div className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-bold text-slate-600">{e.changedByName}</div>
+                      </div>
+                      <div className="font-mono text-sm mt-1">
+                        <span className="text-slate-400">{e.oldValue == null ? '— (初回登録)' : `${Number(e.oldValue).toFixed(1)}h`}</span>
+                        <span className="mx-2 text-slate-400">→</span>
+                        <span className="font-bold text-emerald-700">{Number(e.newValue).toFixed(1)}h</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 mt-1">理由: {e.reason}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <button onClick={closeHistory} className="text-xs font-bold border px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100">閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== 環境設定画面 =====================
+function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDeleteUser, onSaveWorkContents, onAddDept, onRenameDept, onDeleteDept, onUpdateProject, onResetPin, currentUser }) {
+  const [subTab, setSubTab]     = useState('users');
+  const [userForm, setUserForm] = useState({ id:null, name:'', department:depts[0]||'', email:'', role:'member' });
+  const [editUserId, setEditUserId] = useState(null);
+  const [selectedDept, setSelectedDept] = useState(depts[0]||'');
+  const [wItems, setWItems]     = useState(workContents[depts[0]]||[]);
+  const [newItem, setNewItem]   = useState('');
+  const [newDept, setNewDept]   = useState('');
+  const [editDept, setEditDept] = useState(null); // { old, value }
+  const [saving, setSaving]     = useState(false);
+  const [confirm, setConfirm]   = useState(null); // { type:'user'|'dept', id/name }
+  const [projFilter, setProjFilter]   = useState('');
+  const [projShowClosed, setProjShowClosed] = useState(false);
+  const [editProj, setEditProj] = useState(null); // { no, client, subject, isClosed }
+  const pf = p => setEditProj(prev => ({ ...prev, ...p }));
+
+  // 登録済みユーザー一覧のグループ絞り込み（永続化して再マウント時も保持）
+  const [userListDeptFilter, setUserListDeptFilter] = usePersistedState('settings.userListDeptFilter', '');
+  const filteredUsers = useMemo(() => {
+    if (!userListDeptFilter) return users;
+    return users.filter(u => u.department === userListDeptFilter);
+  }, [users, userListDeptFilter]);
+
+  const filteredProjects = useMemo(() => {
+    const q = projFilter.toLowerCase().trim();
+    return (projects || []).filter(p => {
+      if (!projShowClosed && p.isClosed) return false;
+      if (!q) return true;
+      return p.no.toLowerCase().includes(q) || (p.client||'').toLowerCase().includes(q) || (p.subject||'').toLowerCase().includes(q);
+    });
+  }, [projects, projFilter, projShowClosed]);
+
+  const startEditProj = (p) => setEditProj({ no:p.no, client:p.client||'', subject:p.subject||'', isClosed:!!p.isClosed });
+  const cancelEditProj = () => setEditProj(null);
+  const saveEditProj = async () => {
+    if (!editProj || !editProj.client.trim() || !editProj.subject.trim()) return;
+    setSaving(true);
+    const ok = await onUpdateProject(editProj.no, { client:editProj.client.trim(), subject:editProj.subject.trim(), isClosed:editProj.isClosed });
+    if (ok) setEditProj(null);
+    setSaving(false);
+  };
+  const toggleClosed = async (p) => {
+    setSaving(true);
+    await onUpdateProject(p.no, { client:p.client, subject:p.subject, isClosed:!p.isClosed });
+    setSaving(false);
+  };
+
+  // wItems は「ユーザーが部署を切り替えたとき」だけ再読み込みする。
+  //   旧実装は workContents も依存配列に入れていたため、30 秒ごとの
+  //   バックグラウンド同期（loadData silent）で workContents の参照が
+  //   新しくなるたびに発火し、追加途中の項目や削除途中の項目が
+  //   サーバー側の状態で上書きされて「元に戻る」バグになっていた。
+  //
+  //   保存後は handleSaveWorkContents 側で既に親の workContents も
+  //   更新されており、こちらの wItems は保存時点の items と同値なので、
+  //   追加同期は不要。
+  useEffect(() => { setWItems(workContents[selectedDept]||[]); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [selectedDept]);
+  useEffect(() => { if (!depts.includes(selectedDept) && depts.length) setSelectedDept(depts[0]); }, [depts]);
+  useEffect(() => { if (!depts.includes(userForm.department) && depts.length) setUserForm(f=>({...f,department:depts[0]})); }, [depts]);
+
+  const uf = p => setUserForm(prev => ({ ...prev, ...p }));
+
+  const startEditUser = (u) => {
+    setEditUserId(u.id);
+    setUserForm({ id:u.id, name:u.name, department:u.department, email:u.email||'', role: u.role || 'member' });
+  };
+  const cancelEditUser = () => { setEditUserId(null); setUserForm({ id:null, name:'', department:depts[0]||'', email:'', role:'member' }); };
+
+  const handleUserSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const ok = await onSaveUser(userForm);
+    if (ok) cancelEditUser();
+    setSaving(false);
+  };
+
+  const handleDeleteUser = async (id) => {
+    setSaving(true);
+    await onDeleteUser(id);
+    setConfirm(null);
+    setSaving(false);
+  };
+
+  const moveItem = (i, dir) => {
+    const arr = [...wItems];
+    const j = i + dir;
+    if (j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    setWItems(arr);
+  };
+
+  const handleSaveContents = async () => {
+    setSaving(true);
+    await onSaveWorkContents(selectedDept, wItems);
+    setSaving(false);
+  };
+
+  const handleAddDept = async () => {
+    if (!newDept.trim()) return;
+    setSaving(true);
+    const ok = await onAddDept(newDept.trim());
+    if (ok) setNewDept('');
+    setSaving(false);
+  };
+
+  const handleRenameDept = async () => {
+    if (!editDept || !editDept.value.trim() || editDept.old === editDept.value.trim()) { setEditDept(null); return; }
+    setSaving(true);
+    await onRenameDept(editDept.old, editDept.value.trim());
+    setEditDept(null);
+    setSaving(false);
+  };
+
+  const handleDeleteDept = async (name) => {
+    setSaving(true);
+    await onDeleteDept(name);
+    setConfirm(null);
+    setSaving(false);
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-4">
+      {/* サブタブ */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex border-b border-slate-200">
+          {[
+            { id:'users',    icon:<IUser s={16}/>,   label:'ユーザー管理' },
+            { id:'groups',   icon:<IUsers s={16}/>,  label:'グループ管理' },
+            { id:'work',     icon:<IList s={16}/>,   label:'作業内容マスタ' },
+            { id:'projects', icon:<IFolder s={16}/>, label:'注番管理' },
+          ].map(({ id, icon, label }) => (
+            <button key={id} onClick={()=>setSubTab(id)}
+              className={`flex items-center gap-2 px-6 py-3.5 text-sm font-bold transition-all border-b-2 ${subTab===id ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>
+              {icon}{label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-6">
+          {/* ユーザー管理 */}
+          {subTab==='users' && (
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+              <div className="md:col-span-2">
+                <h3 className="text-sm font-black text-slate-700 mb-4">{editUserId ? 'ユーザーを編集' : '新規ユーザーを登録'}</h3>
+                <form onSubmit={handleUserSubmit} className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">氏名 *</label>
+                    <input required value={userForm.name} onChange={e=>uf({ name:e.target.value })} placeholder="山田 太郎"
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"/>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">部署 *</label>
+                    <select required value={userForm.department} onChange={e=>uf({ department:e.target.value })}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400">
+                      {depts.map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">メールアドレス</label>
+                    <input type="email" value={userForm.email} onChange={e=>uf({ email:e.target.value })} placeholder="yamada@example.com"
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"/>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">権限 *</label>
+                    <select value={userForm.role} onChange={e=>uf({ role:e.target.value })}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400">
+                      <option value="member">メンバー（作業記録の入力のみ）</option>
+                      <option value="leader">リーダー（目標時間の変更可）</option>
+                      <option value="admin">管理者（ユーザー・グループ管理・PINリセット可）</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button type="submit" disabled={saving}
+                      className="flex-1 bg-blue-600 text-white py-2 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:bg-slate-300 transition-colors flex items-center justify-center gap-1">
+                      {saving ? <IRefresh s={14} c="animate-spin"/> : (editUserId ? <ISave s={14}/> : <IPlus s={14}/>)}
+                      {editUserId ? '更新' : '登録'}
+                    </button>
+                    {editUserId && <button type="button" onClick={cancelEditUser} className="border px-3 py-2 rounded-xl text-sm text-slate-500 hover:bg-slate-100">キャンセル</button>}
+                  </div>
+                </form>
+              </div>
+
+              <div className="md:col-span-3">
+                <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                  <h3 className="text-sm font-black text-slate-700">
+                    登録済みユーザー
+                    {userListDeptFilter
+                      ? <span className="ml-1 font-normal text-slate-500">（{filteredUsers.length}名 / 全{users.length}名）</span>
+                      : <span className="ml-1 font-normal text-slate-500">（{users.length}名）</span>}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-bold text-slate-500">グループ:</label>
+                    <select value={userListDeptFilter} onChange={e=>setUserListDeptFilter(e.target.value)}
+                      className="border-2 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-blue-400">
+                      <option value="">すべて</option>
+                      {depts.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    {userListDeptFilter && (
+                      <button onClick={()=>setUserListDeptFilter('')}
+                        className="text-[10px] text-slate-500 hover:text-slate-800 underline"
+                        title="フィルター解除">クリア</button>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {filteredUsers.map(u => (
+                    <div key={u.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${editUserId===u.id ? 'border-blue-300 bg-blue-50' : 'border-slate-100 hover:border-slate-200 bg-slate-50'}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getDeptColor(u.department)}`}>
+                        {u.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-sm text-slate-800 truncate">{u.name}</span>
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${ROLE_COLOR[u.role] || ROLE_COLOR.member}`}>{ROLE_LABEL[u.role] || 'メンバー'}</span>
+                          {!u.hasPin && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">PIN未設定</span>}
+                        </div>
+                        <div className="text-[10px] text-slate-500">{u.department} {u.email && `・${u.email}`}</div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={()=>startEditUser(u)} className="text-xs border border-blue-200 text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors">編集</button>
+                        {u.hasPin && u.id !== currentUser.id && (
+                          <button onClick={()=>{ if (window.confirm(`${u.name} さんの PIN をリセットしますか？\n（次回ログイン時に新しい PIN の設定が必要になります）`)) onResetPin(u.id); }}
+                            className="text-xs border border-amber-200 text-amber-600 hover:bg-amber-50 px-2 py-1 rounded-lg transition-colors" title="PINをリセット">PIN</button>
+                        )}
+                        <button onClick={()=>setConfirm({type:'user',id:u.id})} disabled={u.id === currentUser.id}
+                          className="text-xs border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={u.id === currentUser.id ? '自分自身は削除できません' : '削除'}><ITrash s={12}/></button>
+                      </div>
+                    </div>
+                  ))}
+                  {users.length===0 && <p className="text-sm text-slate-400 text-center py-8">ユーザーが登録されていません</p>}
+                  {users.length>0 && filteredUsers.length===0 && (
+                    <p className="text-sm text-slate-400 text-center py-8">
+                      「{userListDeptFilter}」に該当するユーザーがいません
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* グループ管理 */}
+          {subTab==='groups' && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-sm font-black text-slate-700 mb-3">新規グループを登録</h3>
+                <div className="flex gap-2 max-w-md">
+                  <input value={newDept} onChange={e=>setNewDept(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==='Enter'){ handleAddDept(); e.preventDefault(); }}}
+                    placeholder="例：品質管理グループ"
+                    className="flex-1 border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"/>
+                  <button onClick={handleAddDept} disabled={saving||!newDept.trim()}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:bg-slate-300 flex items-center gap-1">
+                    <IPlus s={14}/> 追加
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-black text-slate-700 mb-3">登録済みグループ（{depts.length}件）</h3>
+                <div className="space-y-2">
+                  {depts.map(d => {
+                    const userCount = users.filter(u=>u.department===d).length;
+                    const contentCount = (workContents[d]||[]).length;
+                    const isEditing = editDept?.old === d;
+                    return (
+                      <div key={d} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition-all">
+                        <div className={`w-3 h-10 rounded-full ${getDeptColor(d).split(' ')[0]}`}></div>
+                        <div className="flex-1 min-w-0">
+                          {isEditing ? (
+                            <div className="flex gap-2">
+                              <input value={editDept.value} onChange={e=>setEditDept({...editDept,value:e.target.value})}
+                                onKeyDown={e=>{ if(e.key==='Enter'){ handleRenameDept(); }}}
+                                className="border-2 rounded-lg px-2 py-1 text-sm outline-none focus:border-blue-400"/>
+                              <button onClick={handleRenameDept} className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">保存</button>
+                              <button onClick={()=>setEditDept(null)} className="border px-2 py-1 rounded text-xs text-slate-500">中止</button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="font-bold text-sm text-slate-800">{d}</div>
+                              <div className="text-[10px] text-slate-500">ユーザー {userCount}名 ・ 作業内容 {contentCount}件</div>
+                            </>
+                          )}
+                        </div>
+                        {!isEditing && (
+                          <div className="flex gap-1">
+                            <button onClick={()=>setEditDept({old:d,value:d})} className="text-xs border border-blue-200 text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg">名称変更</button>
+                            <button onClick={()=>setConfirm({type:'dept',name:d})} disabled={userCount>0} title={userCount>0?'所属ユーザーがあるため削除できません':''}
+                              className="text-xs border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"><ITrash s={12}/></button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {depts.length===0 && <p className="text-sm text-slate-400 text-center py-8">グループが登録されていません</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 作業内容マスタ */}
+          {subTab==='work' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-sm font-bold text-slate-600">部署を選択：</label>
+                <div className="flex flex-wrap gap-2">
+                  {depts.map(d => (
+                    <button key={d} onClick={()=>setSelectedDept(d)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${selectedDept===d ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-600">{selectedDept} の作業内容（{wItems.length}件）</span>
+                  <button onClick={handleSaveContents} disabled={saving}
+                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 disabled:bg-slate-300 flex items-center gap-1">
+                    {saving ? <IRefresh s={12} c="animate-spin"/> : <ISave s={12}/>} 保存
+                  </button>
+                </div>
+                <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                  {wItems.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50">
+                      <span className="text-xs font-bold text-slate-400 w-5 text-center">{i+1}</span>
+                      <span className="flex-1 text-sm font-bold text-slate-700">{item}</span>
+                      <div className="flex gap-1">
+                        <button onClick={()=>moveItem(i,-1)} disabled={i===0} className="w-6 h-6 text-slate-400 hover:text-slate-700 disabled:opacity-20 text-xs font-bold">↑</button>
+                        <button onClick={()=>moveItem(i,+1)} disabled={i===wItems.length-1} className="w-6 h-6 text-slate-400 hover:text-slate-700 disabled:opacity-20 text-xs font-bold">↓</button>
+                        <button onClick={()=>setWItems(prev=>prev.filter((_,j)=>j!==i))} className="w-6 h-6 text-red-400 hover:text-red-600 text-xs"><ITrash s={12}/></button>
+                      </div>
+                    </div>
+                  ))}
+                  {wItems.length===0 && <p className="text-xs text-slate-400 text-center py-6">作業内容が登録されていません</p>}
+                </div>
+                <div className="border-t border-slate-200 px-4 py-3 flex gap-2 bg-slate-50">
+                  <input value={newItem} onChange={e=>setNewItem(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==='Enter'&&newItem.trim()){ setWItems(prev=>[...prev,newItem.trim()]); setNewItem(''); e.preventDefault(); }}}
+                    placeholder="新しい作業内容を入力 (Enter で追加)"
+                    className="flex-1 border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400"/>
+                  <button onClick={()=>{ if(newItem.trim()){ setWItems(prev=>[...prev,newItem.trim()]); setNewItem(''); }}}
+                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1">
+                    <IPlus s={14}/> 追加
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 注番管理 */}
+          {subTab==='projects' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <ISearch s={16} c="text-slate-400"/>
+                  <input value={projFilter} onChange={e=>setProjFilter(e.target.value)}
+                    placeholder="注番・客先・件名で検索"
+                    className="flex-1 border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"/>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                  <input type="checkbox" checked={projShowClosed} onChange={e=>setProjShowClosed(e.target.checked)} className="w-4 h-4"/>
+                  完了済みも表示
+                </label>
+                <div className="ml-auto text-xs font-bold text-slate-400">{filteredProjects.length} 件 / 全 {(projects||[]).length} 件</div>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b-2 border-slate-200">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-black text-slate-500 uppercase">注番</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-black text-slate-500 uppercase">客先</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-black text-slate-500 uppercase">件名</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-black text-slate-500 uppercase">状態</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-black text-slate-500 uppercase">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredProjects.map(p => {
+                      const isEditingP = editProj && editProj.no === p.no;
+                      if (isEditingP) return (
+                        <tr key={p.no} className="bg-blue-50">
+                          <td className="px-4 py-2 font-black text-blue-700">{p.no}</td>
+                          <td className="px-4 py-2"><input value={editProj.client} onChange={e=>pf({client:e.target.value})} className="w-full border rounded px-2 py-1 text-xs"/></td>
+                          <td className="px-4 py-2"><input value={editProj.subject} onChange={e=>pf({subject:e.target.value})} className="w-full border rounded px-2 py-1 text-xs"/></td>
+                          <td className="px-4 py-2 text-center">
+                            <label className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">
+                              <input type="checkbox" checked={editProj.isClosed} onChange={e=>pf({isClosed:e.target.checked})} className="w-4 h-4"/>
+                              完了
+                            </label>
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <div className="flex gap-1 justify-end">
+                              <button onClick={saveEditProj} disabled={saving} className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 flex items-center gap-1">
+                                {saving ? <IRefresh s={12} c="animate-spin"/> : <ICheck s={12}/>} 保存
+                              </button>
+                              <button onClick={cancelEditProj} className="border px-2 py-1 rounded text-xs text-slate-500 hover:bg-slate-100"><IX s={12}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                      return (
+                        <tr key={p.no} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-black text-blue-700">{p.no}</td>
+                          <td className="px-4 py-3 text-slate-700">{p.client}</td>
+                          <td className="px-4 py-3 text-slate-600 text-xs">{p.subject}</td>
+                          <td className="px-4 py-3 text-center">
+                            {p.isClosed
+                              ? <span className="inline-flex items-center gap-1 text-[10px] font-black bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full"><ILock s={10}/>完了</span>
+                              : <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">進行中</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex gap-1 justify-end">
+                              <button onClick={()=>startEditProj(p)} className="text-xs border border-blue-200 text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg">編集</button>
+                              <button onClick={()=>toggleClosed(p)} disabled={saving}
+                                className={`text-xs border px-2 py-1 rounded-lg ${p.isClosed ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
+                                {p.isClosed ? '再開' : '完了'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredProjects.length === 0 && (
+                      <tr><td colSpan="5" className="py-12 text-center text-sm font-bold text-slate-300">該当する注番がありません</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 削除確認モーダル */}
+      {confirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={()=>setConfirm(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl" onClick={e=>e.stopPropagation()}>
+            <h3 className="font-black text-slate-800 mb-2">
+              {confirm.type==='user' ? 'ユーザーを削除しますか？' : 'グループを削除しますか？'}
+            </h3>
+            <p className="text-sm text-slate-500 mb-5">
+              {confirm.type==='user'
+                ? 'この操作は取り消せません。作業記録は残りますが担当者名が「不明」と表示されます。'
+                : '所属ユーザーのいないグループのみ削除可能です。'}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={()=>setConfirm(null)} className="border px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">キャンセル</button>
+              <button onClick={()=>confirm.type==='user' ? handleDeleteUser(confirm.id) : handleDeleteDept(confirm.name)} disabled={saving}
+                className="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-700 disabled:bg-slate-300 flex items-center gap-1">
+                {saving ? <IRefresh s={14} c="animate-spin"/> : <ITrash s={14}/>} 削除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>

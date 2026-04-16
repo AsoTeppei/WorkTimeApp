@@ -1,0 +1,30 @@
+<service>
+	<id>.exe</id>
+	<name>作業時間管理システム</name>
+	<description>作業時間 一元管理システム APIサーバー</description>
+	<executable>C:\Program Files\nodejs\node.exe</executable>
+	<argument>D:\My Documents\各グループ\ソフト\WorkTimeApp\node_modules\node-windows\lib\wrapper.js</argument>
+	<argument>--file</argument>
+	<argument>D:\My Documents\各グループ\ソフト\WorkTimeApp\server.js</argument>
+	<argument>--scriptoptions=</argument>
+	<argument>--log</argument>
+	<argument>作業時間管理システム wrapper</argument>
+	<argument>--grow</argument>
+	<argument>0.5</argument>
+	<argument>--wait</argument>
+	<argument>2</argument>
+	<argument>--maxrestarts</argument>
+	<argument>5</argument>
+	<argument>--abortonerror</argument>
+	<argument>n</argument>
+	<argument>--stopparentfirst</argument>
+	<argument>undefined</argument>
+	<logmode>rotate</logmode>
+	<stoptimeout>30sec</stoptimeout>
+	<serviceaccount>
+		<domain>HOST</domain>
+		<user>LocalSystem</user>
+		<password></password>
+	</serviceaccount>
+	<workingdirectory>D:\My Documents\各グループ\ソフト\WorkTimeApp</workingdirectory>
+</service>

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(npm root:*)",
+      "Bash(npm ls:*)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Teppei\\\\Claude作業フォルダ\\\\作業時間一元管理\\\\_tools\")",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(node generate_manual.js)",
+      "Bash(python \"C:\\\\Users\\\\Teppei\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\skills-plugin\\\\498c1d76-a222-4499-87f4-4d3a1117f6d4\\\\ff97b32c-044b-4b29-a7b6-55c05d01bf58\\\\skills\\\\pptx\\\\scripts\\\\office\\\\soffice.py\" --headless --convert-to pdf 開発手順書.pptx)",
+      "Bash(where soffice:*)",
+      "Read(//c/Program Files/LibreOffice/program/**)",
+      "Bash(C:\\\\Users\\\\Teppei\\\\Claude作業フォルダ\\\\作業時間一元管理\\\\WorkTimeApp\\\\index.html)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const s=fs.readFileSync\\(String.raw`C:\\\\Users\\\\Teppei\\\\Claude作業フォルダ\\\\作業時間一元管理\\\\WorkTimeApp\\\\index.html`,'utf8'\\);console.log\\('lines:',s.split\\('\\\\n'\\).length\\);console.log\\('has fiscalLabel:',s.includes\\('fiscalLabel'\\)\\);console.log\\('has PROJECT_CLOSED:',s.includes\\('PROJECT_CLOSED'\\)\\);console.log\\('has fetchYoY:',s.includes\\('fetchYoY'\\)\\);console.log\\('has expandRange:',s.includes\\('expandRange'\\)\\);console.log\\('has loadedRange:',s.includes\\('loadedRange'\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const s=fs.readFileSync\\('index.html','utf8'\\);console.log\\('lines:',s.split\\('\\\\n'\\).length\\);console.log\\('fiscalLabel:',s.includes\\('fiscalLabel'\\)\\);console.log\\('PROJECT_CLOSED:',s.includes\\('PROJECT_CLOSED'\\)\\);console.log\\('fetchYoY:',s.includes\\('fetchYoY'\\)\\);console.log\\('expandRange:',s.includes\\('expandRange'\\)\\);console.log\\('loadedRange:',s.match\\(/loadedRange/g\\).length\\);\")",
+      "Bash(node -e ':*)",
+      "Bash(node --check server.js)",
+      "Bash(npm uninstall:*)",
+      "Bash(python3 -c ':*)",
+      "Read(///HOST/My Documents/各グループ/ソフト/個人_阿曽フォルダ/**)",
+      "Bash(node 01_introduction.js)",
+      "Bash(python \"C:/Users/Teppei/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/498c1d76-a222-4499-87f4-4d3a1117f6d4/ff97b32c-044b-4b29-a7b6-55c05d01bf58/skills/pptx/scripts/office/soffice.py\" --headless --convert-to pdf 01_導入告知資料.pptx)",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python -m markitdown 01_導入告知資料.pptx)",
+      "Bash(node 02_quick_guide.js)",
+      "Bash(node 03_full_manual.js)",
+      "Bash(ls -la *.pptx)"
+    ]
+  }
+}
