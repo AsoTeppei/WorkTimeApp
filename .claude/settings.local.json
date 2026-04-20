@@ -28,7 +28,24 @@
       "Bash(node 02_quick_guide.js)",
       "Bash(node 03_full_manual.js)",
       "Bash(ls -la *.pptx)",
-      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\('index.html','utf8'\\); console.log\\('lines:',s.split\\('\\\\n'\\).length\\); console.log\\('afterShipment filter occurrences:', \\(s.match\\(/filter\\\\.afterShipment/g\\)||[]\\).length\\);\")"
+      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\('index.html','utf8'\\); console.log\\('lines:',s.split\\('\\\\n'\\).length\\); console.log\\('afterShipment filter occurrences:', \\(s.match\\(/filter\\\\.afterShipment/g\\)||[]\\).length\\);\")",
+      "Bash(node inspect3.js)",
+      "Bash(node export_preview.js)",
+      "Bash(node inspect_juchuu.js)",
+      "Bash(node check_coverage.js)",
+      "Bash(node diff_samples.js)",
+      "Bash(node inspect_sheets.js S1154)",
+      "Bash(node inspect_sheets.js HF0421)",
+      "Bash(node verify_projects.js)",
+      "Bash(node inspect_sheets.js B2819)",
+      "Bash(node inspect_row.js 受注４４.xlsx B44 27)",
+      "Bash(node inspect_sheets.js Z1213)",
+      "Bash(node inspect_row.js 受注４４.xlsx Z44 295)",
+      "Bash(node list_unspecified.js)",
+      "Bash(node inspect_sheets.js HB0135)",
+      "Bash(node inspect_sheets.js P1697)",
+      "Bash(node migrate_to_db.js)",
+      "Bash(node backup_db.js)"
     ]
   }
 }

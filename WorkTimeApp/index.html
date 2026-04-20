@@ -55,6 +55,7 @@ const ITarget  = ({s=20,c=''}) => <Icon size={s} className={c} d={<><circle cx="
 const ILock    = ({s=16,c=''}) => <Icon size={s} className={c} d={<><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>}/>;
 const IFolder  = ({s=20,c=''}) => <Icon size={s} className={c} d={<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>}/>;
 const ICopy    = ({s=16,c=''}) => <Icon size={s} className={c} d={<><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></>}/>;
+const ICalendar= ({s=20,c=''}) => <Icon size={s} className={c} d={<><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></>}/>;
 const IStar    = ({s=14,c=''}) => <Icon size={s} className={c} d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>}/>;
 
 // ===================== マスターデータ =====================
@@ -434,14 +435,35 @@ function App() {
   //   - InputScreen がマウント時に 1 回だけ読み取り、即座に null にクリアする
   //     （useEffect + onPresetDateConsumed）ので、通常のタブ切替では影響しない。
   const [pendingInputDate, setPendingInputDate] = useState(null);
+  // 入力画面で「過去ログを複製して当日の作業として再入力」するときの一時データ。
+  // 入力データ一覧の「複製」ボタンから設定され、入力画面マウント時に 1 回だけ
+  // 読み込まれる。日付は常に当日にリセットされる。
+  const [pendingInputForm, setPendingInputForm] = useState(null);
 
-  // 画面遷移ヘルパー。第2引数で { date } を渡すと、入力画面のマウント時に
-  // その日付を初期値として適用する。date を省略すれば通常のタブ切替と同じ。
+  // 画面遷移ヘルパー。第2引数で { date, form } を渡すと、入力画面のマウント時に
+  // それぞれを初期値として適用する。
   const navigate = (tabId, options = {}) => {
     if (tabId === 'input' && options.date) {
       setPendingInputDate(options.date);
     }
+    if (tabId === 'input' && options.form) {
+      setPendingInputForm(options.form);
+    }
     setActiveTab(tabId);
+  };
+
+  // 入力データ一覧から呼ばれる「複製→入力画面へ」
+  const handleDuplicateLog = (log) => {
+    setPendingInputForm({
+      projectNo:     log.projectNo || '',
+      content:       log.content || '',
+      hours:         log.hours != null ? String(log.hours) : '',
+      location:      log.location || '社内',
+      afterShipment: !!log.afterShipment,
+      details:       log.details || '',
+      isPaidLeave:   !!log.isPaidLeave,
+    });
+    setActiveTab('input');
   };
   const [users, setUsers]         = useState([]);
   const [projects, setProjects]   = useState([]);
@@ -762,6 +784,30 @@ function App() {
     return false;
   };
 
+  // 会社カレンダー（営業日上書き）
+  const handleFetchCalendar = async (year) => {
+    try {
+      return await callApi('GET', `/calendar/${year}`);
+    } catch (e) {
+      notify('カレンダー取得失敗: ' + e.message, true);
+      return null;
+    }
+  };
+  const handleSaveCalendarEntry = async (date, isHoliday, note) => {
+    try {
+      const data = await callApi('PUT', '/calendar/entry', { date, isHoliday, note: note || '' });
+      if (data.success) { notify('カレンダーを更新しました'); return true; }
+    } catch (e) { notify('更新失敗: ' + e.message, true); }
+    return false;
+  };
+  const handleDeleteCalendarEntry = async (date) => {
+    try {
+      const data = await callApi('DELETE', `/calendar/${date}`);
+      if (data.success) { notify('デフォルトに戻しました'); return true; }
+    } catch (e) { notify('削除失敗: ' + e.message, true); }
+    return false;
+  };
+
   const handleSaveUser = async (user) => {
     try {
       if (user.id) {
@@ -891,7 +937,7 @@ function App() {
     { id:'home',     icon:<IHome s={16}/>,  label:'ホーム' },
     { id:'input',    icon:<IEdit s={16}/>,  label:'入力画面' },
     { id:'analysis', icon:<IChart s={16}/>, label:'データ解析画面' },
-    ...(isAdmin ? [{ id:'settings', icon:<ICog s={16}/>, label:'環境設定画面' }] : []),
+    ...((isAdmin || isLeader) ? [{ id:'settings', icon:<ICog s={16}/>, label:'環境設定画面' }] : []),
   ];
 
   return (
@@ -947,10 +993,10 @@ function App() {
           sticky ヘッダー（z-50）に隠れてしまう。モーダルが正しく前面に出なく
           なるため、main には transform 系のクラスを付けないこと。 */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
-        {activeTab==='home'     && <HomeScreen  users={users} projects={projects} logs={logs} targets={targets} depts={depts} lastSync={lastSync} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} onFetchMyInputStatus={fetchMyInputStatus}/>}
-        {activeTab==='input'    && <InputScreen users={users} projects={projects} logs={logs} workContents={workContents} targets={targets} lastLog={lastLog} onSave={handleSaveLog} currentUser={currentUser} presetDate={pendingInputDate} onPresetDateConsumed={()=>setPendingInputDate(null)}/>}
-        {activeTab==='analysis' && <AnalysisScreen logs={logs} users={users} projects={projects} targets={targets} depts={depts} workContents={workContents} totalLogs={totalLogs} rangeTotal={rangeTotal} loadedRange={loadedRange} onExpandRange={expandRange} onFetchLogsByRange={fetchLogsByRange} onFetchYoY={fetchYoY} onUpdate={handleUpdateLog} onDelete={handleDeleteLog} onUpdateTarget={handleUpdateTarget} onLoadMore={loadMoreLogs} currentUser={currentUser} isLeader={isLeader} onFetchTargetHistory={handleFetchTargetHistory}/>}
-        {activeTab==='settings' && isAdmin && <SettingsScreen users={users} depts={depts} projects={projects} workContents={workContents} onSaveUser={handleSaveUser} onDeleteUser={handleDeleteUser} onSaveWorkContents={handleSaveWorkContents} onAddDept={handleAddDept} onRenameDept={handleRenameDept} onDeleteDept={handleDeleteDept} onUpdateProject={handleUpdateProject} onResetPin={handleResetPin} currentUser={currentUser}/>}
+        {activeTab==='home'     && <HomeScreen  users={users} projects={projects} logs={logs} targets={targets} depts={depts} lastSync={lastSync} onNavigate={navigate} currentUser={currentUser} isAdmin={isAdmin} isLeader={isLeader} onFetchMyInputStatus={fetchMyInputStatus}/>}
+        {activeTab==='input'    && <InputScreen users={users} projects={projects} logs={logs} workContents={workContents} targets={targets} lastLog={lastLog} onSave={handleSaveLog} currentUser={currentUser} presetDate={pendingInputDate} onPresetDateConsumed={()=>setPendingInputDate(null)} presetForm={pendingInputForm} onPresetFormConsumed={()=>setPendingInputForm(null)}/>}
+        {activeTab==='analysis' && <AnalysisScreen logs={logs} users={users} projects={projects} targets={targets} depts={depts} workContents={workContents} totalLogs={totalLogs} rangeTotal={rangeTotal} loadedRange={loadedRange} onExpandRange={expandRange} onFetchLogsByRange={fetchLogsByRange} onFetchYoY={fetchYoY} onUpdate={handleUpdateLog} onDelete={handleDeleteLog} onUpdateTarget={handleUpdateTarget} onLoadMore={loadMoreLogs} currentUser={currentUser} isLeader={isLeader} onFetchTargetHistory={handleFetchTargetHistory} onDuplicate={handleDuplicateLog}/>}
+        {activeTab==='settings' && (isAdmin || isLeader) && <SettingsScreen users={users} depts={depts} projects={projects} workContents={workContents} onSaveUser={handleSaveUser} onDeleteUser={handleDeleteUser} onSaveWorkContents={handleSaveWorkContents} onAddDept={handleAddDept} onRenameDept={handleRenameDept} onDeleteDept={handleDeleteDept} onUpdateProject={handleUpdateProject} onResetPin={handleResetPin} onFetchCalendar={handleFetchCalendar} onSaveCalendarEntry={handleSaveCalendarEntry} onDeleteCalendarEntry={handleDeleteCalendarEntry} currentUser={currentUser} isAdmin={isAdmin} isLeader={isLeader}/>}
       </main>
 
       {/* フッター（同期ステータス） */}
@@ -979,7 +1025,7 @@ function App() {
 }
 
 // ===================== ホーム: 入力状況パネル =====================
-// 自分の直近 7 営業日分の入力状況をドット表示し、
+// 自分の直近 14 営業日分の入力状況をドット表示し、
 // 未入力日があれば黄色バナーで警告する。
 //
 //   - 土日・祝日はサーバー側で除外済み（営業日のみ返ってくる）
@@ -994,7 +1040,7 @@ function InputStatusPanel({ onFetchMyInputStatus, onNavigate }) {
 
   const load = React.useCallback(async () => {
     setLoading(true);
-    const result = await onFetchMyInputStatus(7);
+    const result = await onFetchMyInputStatus(14);
     if (!result) {
       setErr('取得に失敗しました');
       setLoading(false);
@@ -1061,10 +1107,15 @@ function InputStatusPanel({ onFetchMyInputStatus, onNavigate }) {
             const dow   = DOW_LABEL[d.dow];
             // セルの色分け
             //   ● 緑 = 入力済み
+            //   「有」濃緑 = 有給休暇
             //   ⚠ 黄 = 過去の未入力（警告）
             //   ○ グレー = 今日まだ未入力（リマインド）
             let cellClass, iconNode, stateLabel;
-            if (d.logged) {
+            if (d.isPaidLeave) {
+              cellClass  = 'bg-emerald-500 border-emerald-600 text-white';
+              iconNode   = <span className="text-[10px] font-black px-1.5 py-0 rounded-full bg-white text-emerald-700">有</span>;
+              stateLabel = '有給';
+            } else if (d.logged) {
               cellClass  = 'bg-emerald-100 border-emerald-300 text-emerald-800';
               iconNode   = <span className="text-sm">●</span>;
               stateLabel = `${d.hours}h`;
@@ -1149,7 +1200,7 @@ function InputStatusPanel({ onFetchMyInputStatus, onNavigate }) {
 }
 
 // ===================== ホーム画面 =====================
-function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigate, currentUser, isAdmin, onFetchMyInputStatus }) {
+function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigate, currentUser, isAdmin, isLeader, onFetchMyInputStatus }) {
   const thisMonth = today().substring(0,7);
   const totalH    = logs.reduce((s,l)=>s+Number(l.hours||0), 0);
   const monthH    = logs.filter(l=>ym(l.date)===thisMonth).reduce((s,l)=>s+Number(l.hours||0), 0);
@@ -1176,39 +1227,53 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
       const dept = l.department || users.find(u => u.id === l.userId)?.department;
       if (dept && m[dept] !== undefined) m[dept] += Number(l.hours||0);
     });
-    const max = Math.max(...Object.values(m), 1);
-    return Object.entries(m).map(([dept, h]) => ({ dept, h, pct: (h/max*100) }));
+    // 部署ごとの所属人数（現所属ベース）。0 名の部署は一人当たりを '—' 表示。
+    const memberCount = {};
+    depts.forEach(d => memberCount[d] = users.filter(u => u.department === d).length);
+    return Object.entries(m)
+      .map(([dept, h]) => {
+        const cnt = memberCount[dept] || 0;
+        const perPerson = cnt > 0 ? h / cnt : 0;
+        return { dept, h, members: cnt, perPerson };
+      });
   }, [logs, users, depts, thisMonth]);
+  const [deptViewMode, setDeptViewMode] = useState('total'); // 'total' | 'perPerson'
+  // 表示モードに合わせて降順で並べ直す（合計 / 1人あたり 切替時にも順序が更新される）
+  const sortedDeptMonthly = useMemo(() => {
+    const key = deptViewMode === 'perPerson' ? 'perPerson' : 'h';
+    return [...deptMonthly].sort((a, b) => b[key] - a[key]);
+  }, [deptMonthly, deptViewMode]);
+  const deptMaxValue = useMemo(() => {
+    const key = deptViewMode === 'perPerson' ? 'perPerson' : 'h';
+    return Math.max(...deptMonthly.map(d => d[key]), 1);
+  }, [deptMonthly, deptViewMode]);
 
-  // 今月の注番ランキング TOP 5
+  // 今月の注番ランキング TOP 10（注番なしは除外）
   const topProjects = useMemo(() => {
     const m = {};
-    logs.filter(l=>ym(l.date)===thisMonth).forEach(l => {
-      const key = l.projectNo || '__NO_PROJECT__';
-      m[key] = (m[key]||0) + Number(l.hours||0);
+    logs.filter(l=>ym(l.date)===thisMonth && l.projectNo).forEach(l => {
+      m[l.projectNo] = (m[l.projectNo]||0) + Number(l.hours||0);
     });
     return Object.entries(m)
-      .map(([no, h]) => {
-        if (no === '__NO_PROJECT__') return { no:null, h, client:'注番なしの作業' };
-        return { no, h, client: projects.find(p=>p.no===no)?.client || '' };
-      })
+      .map(([no, h]) => ({ no, h, client: projects.find(p=>p.no===no)?.client || '' }))
       .sort((a,b)=>b.h-a.h)
-      .slice(0,5);
+      .slice(0,10);
   }, [logs, projects, thisMonth]);
 
-  // 今月の担当者ランキング TOP 5
+  // 今月の個人別作業時間（登録ユーザー全員、作業時間0も含めて降順）
   const topUsers = useMemo(() => {
     const m = {};
+    users.forEach(u => m[u.id] = 0);
     logs.filter(l=>ym(l.date)===thisMonth).forEach(l => {
-      m[l.userId] = (m[l.userId]||0) + Number(l.hours||0);
+      if (m[l.userId] !== undefined) m[l.userId] += Number(l.hours||0);
+      else m[l.userId] = Number(l.hours||0); // 退職等で users に存在しないログ
     });
     return Object.entries(m)
       .map(([uid, h]) => {
         const u = users.find(u=>u.id===Number(uid));
         return { name: u?.name || '不明', dept: u?.department || '', h };
       })
-      .sort((a,b)=>b.h-a.h)
-      .slice(0,5);
+      .sort((a,b)=>b.h-a.h);
   }, [logs, users, thisMonth]);
 
   // 出荷後対応比率（今月）
@@ -1219,7 +1284,7 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
   const menus = [
     { id:'input',    icon:<IEdit s={30}/>,  title:'入力画面',       desc:'日々の作業時間を記録',             color:'from-blue-500 to-blue-700',       border:'border-blue-200' },
     { id:'analysis', icon:<IChart s={30}/>, title:'データ解析画面', desc:'一覧表示・集計・CSV出力',          color:'from-violet-500 to-violet-700',   border:'border-violet-200' },
-    ...(isAdmin ? [{ id:'settings', icon:<ICog s={30}/>,   title:'環境設定画面',   desc:'ユーザー・グループ・作業内容管理', color:'from-slate-600 to-slate-800',     border:'border-slate-200' }] : []),
+    ...((isAdmin || isLeader) ? [{ id:'settings', icon:<ICog s={30}/>,   title:'環境設定画面',   desc: isAdmin ? 'ユーザー・グループ・作業内容管理' : '自グループの作業内容マスタ管理', color:'from-slate-600 to-slate-800',     border:'border-slate-200' }] : []),
   ];
 
   // 現在の期
@@ -1236,7 +1301,7 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
         </div>
       </div>
 
-      {/* 入力忘れ防止パネル（直近7営業日の入力状況） */}
+      {/* 入力忘れ防止パネル（直近14営業日の入力状況） */}
       <InputStatusPanel onFetchMyInputStatus={onFetchMyInputStatus} onNavigate={onNavigate}/>
 
       {/* サマリー */}
@@ -1277,22 +1342,42 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 部署別バー */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm md:col-span-1">
-          <div className="flex items-center gap-2 mb-4">
-            <IChart s={16} c="text-slate-500"/>
-            <h3 className="text-sm font-black text-slate-700">今月の部署別</h3>
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <IChart s={16} c="text-slate-500"/>
+              <h3 className="text-sm font-black text-slate-700">今月の部署別</h3>
+            </div>
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+              {[
+                { id:'total',     label:'合計' },
+                { id:'perPerson', label:'1人あたり' },
+              ].map(({id,label}) => (
+                <button key={id} onClick={()=>setDeptViewMode(id)}
+                  className={`text-[10px] font-black px-2 py-1 rounded-md transition-colors ${deptViewMode===id ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-white'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="space-y-2">
-            {deptMonthly.map(({dept, h, pct}) => (
-              <div key={dept}>
-                <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
-                  <span className="truncate">{dept}</span>
-                  <span>{h.toFixed(1)}h</span>
+            {sortedDeptMonthly.map(({dept, h, members, perPerson}) => {
+              const value = deptViewMode === 'perPerson' ? perPerson : h;
+              const pct   = deptMaxValue > 0 ? (value / deptMaxValue * 100) : 0;
+              const valueLabel = deptViewMode === 'perPerson'
+                ? (members > 0 ? `${perPerson.toFixed(1)}h / 人` : '—（0名）')
+                : `${h.toFixed(1)}h`;
+              return (
+                <div key={dept}>
+                  <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                    <span className="truncate">{dept}{deptViewMode==='perPerson' && members>0 && <span className="text-slate-400 font-normal ml-1">({members}名)</span>}</span>
+                    <span>{valueLabel}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full bar-fill ${getDeptColor(dept).split(' ')[0].replace('bg-','bg-').replace('100','500')}`} style={{width:`${pct.toFixed(0)}%`}}/>
+                  </div>
                 </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full bar-fill ${getDeptColor(dept).split(' ')[0].replace('bg-','bg-').replace('100','500')}`} style={{width:`${pct.toFixed(0)}%`}}/>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {deptMonthly.every(d=>d.h===0) && <p className="text-xs text-slate-400 text-center py-4">データなし</p>}
           </div>
         </div>
@@ -1301,20 +1386,14 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <IFolder s={16} c="text-slate-500"/>
-            <h3 className="text-sm font-black text-slate-700">今月の注番TOP5</h3>
+            <h3 className="text-sm font-black text-slate-700">今月の注番TOP10</h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
             {topProjects.map((p, i) => (
-              <div key={p.no || '__noproj__'} className="flex items-center gap-2 text-xs">
+              <div key={p.no} className="flex items-center gap-2 text-xs">
                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black flex items-center justify-center flex-shrink-0">{i+1}</span>
-                {p.no ? (
-                  <>
-                    <span className="font-bold text-blue-700 flex-shrink-0">{p.no}</span>
-                    <span className="text-slate-400 truncate flex-1">{p.client}</span>
-                  </>
-                ) : (
-                  <span className="font-bold text-amber-700 truncate flex-1">注番なし</span>
-                )}
+                <span className="font-bold text-blue-700 flex-shrink-0">{p.no}</span>
+                <span className="text-slate-400 truncate flex-1">{p.client}</span>
                 <span className="font-black text-slate-700">{p.h.toFixed(1)}h</span>
               </div>
             ))}
@@ -1322,13 +1401,14 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
           </div>
         </div>
 
-        {/* 担当者TOP5 */}
+        {/* 個人別作業時間（全員） */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <IUsers s={16} c="text-slate-500"/>
-            <h3 className="text-sm font-black text-slate-700">今月の担当者TOP5</h3>
+            <h3 className="text-sm font-black text-slate-700">今月の個人別作業時間</h3>
+            <span className="text-[10px] text-slate-400 ml-auto">{topUsers.length}名</span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
             {topUsers.map((u, i) => (
               <div key={u.name+i} className="flex items-center gap-2 text-xs">
                 <span className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-black flex items-center justify-center flex-shrink-0">{i+1}</span>
@@ -1364,7 +1444,7 @@ function HomeScreen({ users, projects, logs, targets, depts, lastSync, onNavigat
 }
 
 // ===================== 入力画面 =====================
-function InputScreen({ users, projects, logs, workContents, targets, lastLog, onSave, currentUser, presetDate, onPresetDateConsumed }) {
+function InputScreen({ users, projects, logs, workContents, targets, lastLog, onSave, currentUser, presetDate, onPresetDateConsumed, presetForm, onPresetFormConsumed }) {
   // 担当者はログインユーザーに固定
   const fixedUserId = currentUser ? String(currentUser.id) : '';
   // マウント時に presetDate が渡されていれば、それを初期日付として使う。
@@ -1375,12 +1455,30 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
   //       → InputScreen がマウント、初期 form.date が '2026-04-10' になる
   //       → 下の useEffect が onPresetDateConsumed() を呼んで親の state を null に戻す
   const initialDate = presetDate || today();
-  const blank = { userId: fixedUserId, date:initialDate, projectNo:'', content:'', hours:'', location:'社内', afterShipment:false, details:'', targetHours:'', isNewProject:false, newClient:'', newSubject:'', customContent:'' };
+  // presetForm: 入力データ一覧の「複製」から渡される。日付は当日に強制する。
+  const blank = presetForm
+    ? {
+        userId: fixedUserId,
+        date: today(),
+        projectNo:    presetForm.projectNo || '',
+        content:      presetForm.content   || '',
+        hours:        presetForm.hours     || '',
+        location:     presetForm.location  || '社内',
+        afterShipment:!!presetForm.afterShipment,
+        details:      presetForm.details   || '',
+        targetHours: '',
+        isNewProject: false,
+        newClient:    '',
+        newSubject:   '',
+        customContent:'',
+        isPaidLeave:  !!presetForm.isPaidLeave,
+      }
+    : { userId: fixedUserId, date:initialDate, projectNo:'', content:'', hours:'', location:'社内', afterShipment:false, details:'', targetHours:'', isNewProject:false, newClient:'', newSubject:'', customContent:'', isPaidLeave:false };
   const [form, setForm]     = useState({ ...blank });
-  const [pInput, setPInput] = useState('');
+  const [pInput, setPInput] = useState(presetForm?.projectNo || '');
   const [showSug, setShowSug] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [hasProject, setHasProject] = useState(true); // 注番あり/なし
+  const [hasProject, setHasProject] = useState(presetForm ? !!presetForm.projectNo : true); // 注番あり/なし
   const sugRef = useRef(null);
 
   // ログインユーザーが変わったら userId を同期（ログアウト/再ログイン時）
@@ -1388,14 +1486,17 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
     setForm(prev => ({ ...prev, userId: fixedUserId }));
   }, [fixedUserId]);
 
-  // presetDate を 1 回だけ消費する。マウント時に initialDate で
-  // 既に反映済みなので、ここでは親の state をクリアするだけ。
-  // これにより、次に入力画面を開いたときは通常の today() に戻る。
+  // presetDate / presetForm を 1 回だけ消費する。マウント時に initialDate /
+  // blank で既に反映済みなので、ここでは親の state をクリアするだけ。
+  // これにより、次に入力画面を開いたときは通常の today() / 空フォームに戻る。
   useEffect(() => {
     if (presetDate && onPresetDateConsumed) {
       onPresetDateConsumed();
     }
-    // 初回マウント時のみ発火させたい（presetDate の変化で再実行しない）
+    if (presetForm && onPresetFormConsumed) {
+      onPresetFormConsumed();
+    }
+    // 初回マウント時のみ発火させたい
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1489,6 +1590,22 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 有給休暇モード: 日付だけでよい。注番/内容/時間などはサーバー側で固定値に強制。
+    if (form.isPaidLeave) {
+      if (!form.date) { alert('作業日を入力してください。'); return; }
+      setSubmitting(true);
+      const payload = {
+        userId: Number(form.userId),
+        date: form.date,
+        isPaidLeave: true
+      };
+      const ok = await onSave(payload);
+      if (ok) { setForm({ ...blank, userId: form.userId, date: form.date }); setPInput(''); }
+      setSubmitting(false);
+      return;
+    }
+
     if (hasProject && !pInput) return;
     if (needsTarget && (!form.targetHours || Number(form.targetHours) <= 0)) {
       alert('この注番は初めての入力です。目標時間を入力してください。');
@@ -1559,7 +1676,20 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
                   className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-blue-400 focus:ring-4 focus:ring-blue-50 outline-none"/>
               </div>
 
+              {/* 有給休暇チェック */}
+              <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${form.isPaidLeave ? 'bg-emerald-50 border-emerald-400' : 'bg-slate-50 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'}`}>
+                <input type="checkbox" checked={form.isPaidLeave} onChange={e=>f({ isPaidLeave:e.target.checked })} className="w-5 h-5 rounded"/>
+                <span className="text-sm font-bold text-slate-700">有給休暇（この日は作業なし）</span>
+                {form.isPaidLeave && <span className="ml-auto text-[10px] bg-emerald-500 text-white font-black px-2 py-0.5 rounded-full">有給</span>}
+              </label>
+              {form.isPaidLeave && (
+                <p className="text-[10px] font-bold text-emerald-700 flex items-center gap-1 -mt-3">
+                  ℹ 作業日だけ指定して登録してください。注番/作業内容/時間の入力は不要です。
+                </p>
+              )}
+
               {/* 注番あり/なし トグル */}
+              {!form.isPaidLeave && (
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-slate-600 uppercase tracking-wider">注番の有無 *</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -1578,9 +1708,10 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
                   </p>
                 )}
               </div>
+              )}
 
               {/* 注番 */}
-              {hasProject && (
+              {!form.isPaidLeave && hasProject && (
               <div className="space-y-1.5 relative" ref={sugRef}>
                 <label className="text-xs font-black text-slate-600 uppercase tracking-wider">
                   注番 *
@@ -1658,7 +1789,7 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
               )}
 
               {/* 新規注番フォーム */}
-              {hasProject && isNewProject && pInput && (
+              {!form.isPaidLeave && hasProject && isNewProject && pInput && (
                 <div className="p-4 bg-amber-50 rounded-xl border-2 border-amber-200 space-y-3 fade-in">
                   <p className="text-xs font-black text-amber-700 flex items-center gap-1.5">⚠ 新規注番です。客先と件名を入力してください</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -1679,7 +1810,7 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
               )}
 
               {/* 目標時間 — 担当者×注番が初回のときのみ表示 */}
-              {needsTarget && (
+              {!form.isPaidLeave && needsTarget && (
                 <div className="p-4 bg-emerald-50 rounded-xl border-2 border-emerald-200 space-y-2 fade-in">
                   <label className="text-xs font-black text-emerald-700 flex items-center gap-1.5">
                     <ITarget s={14}/> この注番の目標時間（初回のみ必須）*
@@ -1694,7 +1825,7 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
                   </div>
                 </div>
               )}
-              {existingTarget && !needsTarget && form.userId && pInput && (
+              {!form.isPaidLeave && existingTarget && !needsTarget && form.userId && pInput && (
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 text-xs">
                   <ITarget s={14} c="text-slate-500"/>
                   <span className="font-bold text-slate-600">この注番の目標時間：</span>
@@ -1704,7 +1835,8 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
               )}
             </div>
 
-            {/* 右列 */}
+            {/* 右列（有給休暇時は非表示） */}
+            {!form.isPaidLeave && (
             <div className="space-y-5">
               {/* 作業内容 */}
               <div className="space-y-1.5">
@@ -1759,6 +1891,7 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
                   className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:ring-4 outline-none resize-none ${!hasProject ? 'border-amber-300 bg-amber-50/50 focus:border-amber-400 focus:ring-amber-50' : 'border-slate-200 focus:border-blue-400 focus:ring-blue-50'}`}/>
               </div>
             </div>
+            )}
           </div>
 
           {/* 送信ボタン */}
@@ -1766,7 +1899,7 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
             <button type="submit" disabled={submitting}
               className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-slate-400 text-white py-3.5 rounded-xl font-black text-base shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2">
               {submitting ? <IRefresh s={20} c="animate-spin"/> : <ISave s={20}/>}
-              {submitting ? '登録中...' : '作業データを登録する'}
+              {submitting ? '登録中...' : form.isPaidLeave ? '有給休暇として登録する' : '作業データを登録する'}
             </button>
           </div>
         </form>
@@ -1775,8 +1908,170 @@ function InputScreen({ users, projects, logs, workContents, targets, lastLog, on
   );
 }
 
+// ===================== 注番マルチセレクト（Excelのチェック式フィルター風）=====================
+// selected: 選択された注番の配列。空配列なら「全選択（フィルター無効）」扱い。
+//   特殊キー '__NO_PROJECT__' は「注番なし」のログを意味する。
+// availableNos: 他フィルター適用後に実際に出現する注番の Set（候補をこの範囲に絞る）
+const NO_PROJECT_KEY = '__NO_PROJECT__';
+function ProjectMultiSelect({ projects, selected, onChange, availableNos }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const selSet = useMemo(() => new Set(selected || []), [selected]);
+
+  // 候補プロジェクト一覧（availableNos に含まれるもののみ + 検索フィルター）
+  const visibleProjItems = useMemo(() => {
+    const filtered = projects.filter(p => !availableNos || availableNos.has(p.no));
+    const items = filtered.map(p => ({ no: p.no, label: `${p.no}  ${p.client||''}${p.subject ? ' / '+p.subject : ''}` }));
+    const q = search.trim().toLowerCase();
+    return q ? items.filter(it => it.label.toLowerCase().includes(q)) : items;
+  }, [projects, availableNos, search]);
+
+  // 注番なしを表示するか（availableNos に含まれていて、検索条件にもマッチする場合）
+  const showNoProj = (!availableNos || availableNos.has(NO_PROJECT_KEY)) &&
+                     (!search.trim() || '(注番なし)'.includes(search) || 'なし'.includes(search) || NO_PROJECT_KEY.toLowerCase().includes(search.toLowerCase()));
+
+  // 注番先頭の連続するアルファベット部分でグループ化（"HF1234" → "HF"、"A123" → "A"、"123" → "0-9"）
+  const groups = useMemo(() => {
+    const grouped = {};
+    visibleProjItems.forEach(it => {
+      const m = (it.no || '').toUpperCase().match(/^[A-Z]+/);
+      const key = m ? m[0] : '0-9';
+      (grouped[key] = grouped[key] || []).push(it);
+    });
+    let keys = Object.keys(grouped).sort();
+    if (sortDir === 'desc') keys.reverse();
+    keys.forEach(k => {
+      grouped[k].sort((a, b) => a.no.localeCompare(b.no));
+      if (sortDir === 'desc') grouped[k].reverse();
+    });
+    return keys.map(k => ({ key: k, items: grouped[k] }));
+  }, [visibleProjItems, sortDir]);
+
+  const toggleItem = (no) => {
+    if (selSet.has(no)) onChange((selected || []).filter(x => x !== no));
+    else onChange([...(selected || []), no]);
+  };
+  const toggleGroup = (groupKey) => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }));
+
+  const groupSelectionState = (group) => {
+    const total = group.items.length;
+    const sel = group.items.filter(it => selSet.has(it.no)).length;
+    if (sel === 0) return 'none';
+    if (sel === total) return 'all';
+    return 'some';
+  };
+  const toggleGroupSelection = (group) => {
+    const state = groupSelectionState(group);
+    if (state === 'all') {
+      const remove = new Set(group.items.map(it => it.no));
+      onChange((selected || []).filter(x => !remove.has(x)));
+    } else {
+      const add = group.items.map(it => it.no);
+      onChange(Array.from(new Set([...(selected || []), ...add])));
+    }
+  };
+
+  const allVisibleNos = useMemo(() => {
+    const arr = [];
+    if (showNoProj) arr.push(NO_PROJECT_KEY);
+    groups.forEach(g => g.items.forEach(it => arr.push(it.no)));
+    return arr;
+  }, [groups, showNoProj]);
+
+  const selectAllVisible = () => onChange(Array.from(new Set([...(selected || []), ...allVisibleNos])));
+  const deselectAllVisible = () => {
+    const vis = new Set(allVisibleNos);
+    onChange((selected || []).filter(x => !vis.has(x)));
+  };
+  const clearAll = () => onChange([]);
+  const expandAll = () => {
+    const exp = {};
+    groups.forEach(g => exp[g.key] = true);
+    setExpandedGroups(exp);
+  };
+  const collapseAll = () => setExpandedGroups({});
+
+  const label = (selected && selected.length > 0) ? `注番: ${selected.length} 件選択` : '注番: すべて';
+  const hasFilter = selected && selected.length > 0;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={()=>setOpen(o=>!o)}
+        className={`border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 hover:bg-slate-50 flex items-center gap-1 ${hasFilter ? 'bg-blue-50 border-blue-300 text-blue-800 font-bold' : 'bg-white'}`}>
+        {label} <span className="text-slate-400">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 w-96 bg-white border border-slate-200 rounded-lg shadow-xl p-2 space-y-2">
+          <input type="text" value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="注番・客先・件名で検索..."
+            className="w-full border rounded px-2 py-1 text-xs outline-none focus:border-blue-400"/>
+          <div className="flex gap-1 text-[10px] flex-wrap items-center">
+            <button type="button" onClick={selectAllVisible} className="text-blue-700 hover:bg-blue-50 px-2 py-0.5 rounded border border-blue-200">全選択</button>
+            <button type="button" onClick={deselectAllVisible} className="text-slate-600 hover:bg-slate-50 px-2 py-0.5 rounded border border-slate-200">全解除</button>
+            <button type="button" onClick={clearAll} className="text-rose-600 hover:bg-rose-50 px-2 py-0.5 rounded border border-rose-200">すべてクリア</button>
+            <span className="mx-1 text-slate-300">|</span>
+            <button type="button" onClick={expandAll} className="text-slate-600 hover:bg-slate-50 px-2 py-0.5 rounded">全展開</button>
+            <button type="button" onClick={collapseAll} className="text-slate-600 hover:bg-slate-50 px-2 py-0.5 rounded">全たたみ</button>
+            <button type="button" onClick={()=>setSortDir(d => d==='asc'?'desc':'asc')}
+              className="ml-auto text-slate-700 hover:bg-slate-50 px-2 py-0.5 rounded border border-slate-200 font-bold">
+              並び: {sortDir === 'asc' ? 'A→Z 昇順' : 'Z→A 降順'}
+            </button>
+          </div>
+          <div className="max-h-72 overflow-y-auto border-t pt-1 space-y-0.5">
+            {showNoProj && (
+              <label className="flex items-center gap-2 px-1 py-0.5 hover:bg-amber-100/60 rounded cursor-pointer bg-amber-50/60">
+                <input type="checkbox" checked={selSet.has(NO_PROJECT_KEY)} onChange={()=>toggleItem(NO_PROJECT_KEY)}/>
+                <span className="text-xs font-bold text-amber-700">(注番なし)</span>
+              </label>
+            )}
+            {groups.map(group => {
+              const expanded = !!expandedGroups[group.key];
+              const selState = groupSelectionState(group);
+              return (
+                <div key={group.key}>
+                  <div className="flex items-center gap-2 px-1 py-0.5 bg-slate-50 hover:bg-slate-100 rounded">
+                    <button type="button" onClick={()=>toggleGroup(group.key)} className="text-xs text-slate-600 w-4 text-center">{expanded ? '▼' : '▶'}</button>
+                    <input type="checkbox"
+                      checked={selState === 'all'}
+                      ref={el => { if (el) el.indeterminate = selState === 'some'; }}
+                      onChange={()=>toggleGroupSelection(group)}/>
+                    <span onClick={()=>toggleGroup(group.key)} className="text-xs font-bold text-slate-700 flex-1 cursor-pointer">{group.key} <span className="text-slate-400 font-normal">({group.items.length}件)</span></span>
+                  </div>
+                  {expanded && group.items.map(it => (
+                    <label key={it.no} className="flex items-center gap-2 px-1 py-0.5 pl-8 hover:bg-slate-50 rounded cursor-pointer">
+                      <input type="checkbox" checked={selSet.has(it.no)} onChange={()=>toggleItem(it.no)}/>
+                      <span className="text-xs truncate" title={it.label}>{it.label}</span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+            {groups.length === 0 && !showNoProj && (
+              <div className="text-xs text-slate-400 text-center py-2">該当なし</div>
+            )}
+          </div>
+          <div className="text-[10px] text-slate-500 border-t pt-1">
+            ※ 候補は他フィルターに該当する注番のみ。何も選択しない=すべて表示
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===================== データ解析画面（一覧 + 集計 タブ）=====================
-function AnalysisScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onFetchLogsByRange, onFetchYoY, onUpdate, onDelete, onUpdateTarget, onLoadMore, currentUser, isLeader, onFetchTargetHistory }) {
+function AnalysisScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onFetchLogsByRange, onFetchYoY, onUpdate, onDelete, onUpdateTarget, onLoadMore, currentUser, isLeader, onFetchTargetHistory, onDuplicate }) {
   // NOTE: subTab は localStorage に永続化する（usePersistedState）。
   //   親コンポーネント（App）は isLoading=true の間、画面全体を
   //   ローディングスピナーに差し替えるため、AnalysisScreen が
@@ -1792,7 +2087,7 @@ function AnalysisScreen({ logs, users, projects, targets, depts, workContents, t
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex border-b border-slate-200">
           {[
-            { id:'list',    icon:<IList s={16}/>,  label:'データ一覧' },
+            { id:'list',    icon:<IList s={16}/>,  label:'入力データ一覧' },
             { id:'summary', icon:<IChart s={16}/>, label:'集計画面' },
           ].map(({id,icon,label}) => (
             <button key={id} onClick={()=>setSubTab(id)}
@@ -1803,15 +2098,15 @@ function AnalysisScreen({ logs, users, projects, targets, depts, workContents, t
         </div>
       </div>
 
-      {subTab==='list'    && <ListScreen    logs={logs} users={users} projects={projects} targets={targets} depts={depts} workContents={workContents} totalLogs={totalLogs} rangeTotal={rangeTotal} loadedRange={loadedRange} onExpandRange={onExpandRange} onUpdate={onUpdate} onDelete={onDelete} onLoadMore={onLoadMore}/>}
+      {subTab==='list'    && <ListScreen    logs={logs} users={users} projects={projects} targets={targets} depts={depts} workContents={workContents} totalLogs={totalLogs} rangeTotal={rangeTotal} loadedRange={loadedRange} onExpandRange={onExpandRange} onUpdate={onUpdate} onDelete={onDelete} onLoadMore={onLoadMore} onDuplicate={onDuplicate}/>}
       {subTab==='summary' && <SummaryScreen logs={logs} users={users} projects={projects} targets={targets} depts={depts} loadedRange={loadedRange} onExpandRange={onExpandRange} onFetchLogsByRange={onFetchLogsByRange} onFetchYoY={onFetchYoY} onUpdateTarget={onUpdateTarget} currentUser={currentUser} isLeader={isLeader} onFetchTargetHistory={onFetchTargetHistory}/>}
     </div>
   );
 }
 
 // ===================== データ一覧画面 =====================
-function ListScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onUpdate, onDelete, onLoadMore }) {
-  const [filter, setFilter] = usePersistedState('list.filter', { dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'', afterShipment:'' });
+function ListScreen({ logs, users, projects, targets, depts, workContents, totalLogs, rangeTotal, loadedRange, onExpandRange, onUpdate, onDelete, onLoadMore, onDuplicate }) {
+  const [filter, setFilter] = usePersistedState('list.filter', { dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNos:[], afterShipment:'' });
   const [sort, setSort]     = usePersistedState('list.sort',   { key:'date', dir:'desc' });
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -1833,6 +2128,21 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
     setExpanding(false);
   };
 
+  // 日付フィルターが読み込み済み範囲より過去になったら自動でサーバーから追加取得
+  // （手動で +Xヶ月 ボタンを押さなくても、ユーザーが日付欄を 2023 等に変えれば過去ログが自動ロード）
+  useEffect(() => {
+    if (!loadedRange || !onExpandRange) return;
+    const tid = setTimeout(() => {
+      const target = filter.dateMode === 'single' ? filter.dateSingle : filter.dateFrom;
+      if (!target || target >= loadedRange.from) return;
+      const [ly, lm] = loadedRange.from.split('-').map(Number);
+      const [ty, tm] = target.split('-').map(Number);
+      const diffMonths = (ly - ty) * 12 + (lm - tm);
+      if (diffMonths > 0) onExpandRange(diffMonths);
+    }, 500);
+    return () => clearTimeout(tid);
+  }, [filter.dateMode, filter.dateFrom, filter.dateSingle, loadedRange, onExpandRange]);
+
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
     const ok = await onDelete(deleteConfirm.id);
@@ -1842,8 +2152,11 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
   const ff = p => setFilter(prev => ({ ...prev, ...p }));
   const deptUsers = filter.dept ? users.filter(u=>u.department===filter.dept) : users;
 
-  const filtered = useMemo(() => {
-    return logs.filter(l => {
+  // projectNos 以外のフィルター適用ログ（=注番マルチセレクトの候補ベース）と、
+  // それに projectNos も適用した最終フィルター結果を一度に計算する。
+  // availableProjectNos: 「他のフィルターに該当する注番」だけをチェック候補にするため。
+  const { filtered, availableProjectNos } = useMemo(() => {
+    const baseMatch = (l) => {
       if (filter.dateMode === 'single') {
         if (filter.dateSingle && l.date !== filter.dateSingle) return false;
       } else {
@@ -1856,19 +2169,17 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
         const recDept = l.department || users.find(u=>u.id===l.userId)?.department;
         if (recDept !== filter.dept) return false;
       }
-      if (filter.projectNoMode === 'none') {
-        if (l.projectNo) return false; // 注番なしのみ
-      } else if (filter.projectNoMode === 'has') {
-        if (!l.projectNo) return false; // 注番ありのみ
-      }
-      if (filter.projectNo && filter.projectNoMode !== 'none') {
-        const q = filter.projectNo.toLowerCase();
-        if (!(l.projectNo || '').toLowerCase().includes(q)) return false;
-      }
       if (filter.afterShipment === 'yes' && !l.afterShipment) return false;
       if (filter.afterShipment === 'no'  &&  l.afterShipment) return false;
       return true;
-    });
+    };
+    const baseLogs = logs.filter(baseMatch);
+    const avail = new Set();
+    baseLogs.forEach(l => avail.add(l.projectNo || NO_PROJECT_KEY));
+    const finalLogs = (filter.projectNos && filter.projectNos.length > 0)
+      ? baseLogs.filter(l => filter.projectNos.includes(l.projectNo || NO_PROJECT_KEY))
+      : baseLogs;
+    return { filtered: finalLogs, availableProjectNos: avail };
   }, [logs, filter, users]);
 
   // 担当者×注番ごとの実績合計
@@ -1911,6 +2222,14 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
 
   const saveEdit = async () => {
     setSaving(true);
+    // 有給休暇の編集は作業日だけ
+    if (editForm.isPaidLeave) {
+      const payload = { id: editForm.id, userId: editForm.userId, date: editForm.date, isPaidLeave: true };
+      const ok = await onUpdate(payload);
+      if (ok) setEditId(null);
+      setSaving(false);
+      return;
+    }
     const finalContent = editForm.content === '__OTHER__' ? (editForm.customContent || '').trim() : editForm.content;
     if (!finalContent) {
       alert('作業内容を入力してください。');
@@ -2010,26 +2329,14 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
             <option value="">全担当者</option>
             {deptUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
-          <select value={filter.projectNoMode || ''} onChange={e=>ff({ projectNoMode:e.target.value, projectNo: e.target.value==='none' ? '' : filter.projectNo })}
-            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
-            <option value="">注番すべて</option>
-            <option value="has">注番ありのみ</option>
-            <option value="none">注番なしのみ</option>
-          </select>
-          <input type="text" value={filter.projectNo} onChange={e=>ff({ projectNo:e.target.value })}
-            list="list-projects-datalist" placeholder="注番（部分一致）"
-            disabled={filter.projectNoMode==='none'}
-            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 w-36 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"/>
-          <datalist id="list-projects-datalist">
-            {projects.map(p=><option key={p.no} value={p.no}>{p.client} / {p.subject}</option>)}
-          </datalist>
+          <ProjectMultiSelect projects={projects} selected={filter.projectNos || []} onChange={v=>ff({ projectNos: v })} availableNos={availableProjectNos}/>
           <select value={filter.afterShipment || ''} onChange={e=>ff({ afterShipment:e.target.value })}
             className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
             <option value="">出荷後すべて</option>
             <option value="yes">出荷後対応のみ</option>
             <option value="no">出荷後対応以外</option>
           </select>
-          <button onClick={()=>{ setFilter({ dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNo:'', projectNoMode:'', afterShipment:'' }); clearPref('list.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
+          <button onClick={()=>{ setFilter({ dateMode:'range', dateFrom:'', dateTo:'', dateSingle:'', dept:'', userId:'', projectNos:[], afterShipment:'' }); clearPref('list.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
           <div className="ml-auto text-xs font-bold text-slate-400">{sorted.length} 件</div>
         </div>
       </div>
@@ -2062,6 +2369,29 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
                 const progress = target ? (actual/target*100) : 0;
                 // 表示部署は「記録時点の所属」を優先（ユーザーが異動しても過去の記録は元部署として表示）
                 const recDept = l.department || u?.department || '';
+
+                if (isEdit && l.isPaidLeave) return (
+                  <tr key={l.id} className="bg-emerald-50">
+                    <td className="px-4 py-2"><input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} className="border rounded px-2 py-1 text-xs w-32"/></td>
+                    <td className="px-4 py-2">
+                      <div className="font-bold text-sm">{u?.name||'不明'}</div>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${getDeptColor(recDept)}`}>{recDept}</span>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-slate-400">—</td>
+                    <td className="px-4 py-2" colSpan={6}>
+                      <span className="text-[10px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full mr-2">有給休暇</span>
+                      <span className="text-xs text-slate-500">この行は有給休暇です。作業日のみ変更できます（内容の修正が必要なら削除して再登録してください）。</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={saveEdit} disabled={saving} className="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 flex items-center gap-1">
+                          {saving ? <IRefresh s={12} c="animate-spin"/> : <ICheck s={12}/>} 保存
+                        </button>
+                        <button onClick={cancelEdit} className="border px-2 py-1 rounded text-xs text-slate-500 hover:bg-slate-100"><IX s={12}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
 
                 if (isEdit) return (
                   <tr key={l.id} className="bg-blue-50">
@@ -2108,6 +2438,34 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
                     </td>
                   </tr>
                 );
+                if (l.isPaidLeave) return (
+                  <tr key={l.id} className="bg-emerald-50/40 hover:bg-emerald-50 transition-colors">
+                    <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{fmtDateDow(l.date)}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-sm">{u?.name||'不明'}</div>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${getDeptColor(recDept)}`}>{recDept}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[10px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full">有給</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-bold text-sm text-emerald-700">有給休暇</span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-slate-400 whitespace-nowrap">—</td>
+                    <td className="px-4 py-3 text-right text-xs text-slate-300">—</td>
+                    <td className="px-4 py-3 text-right text-xs text-slate-300">—</td>
+                    <td className="px-4 py-3"><span className="text-xs text-slate-300">—</span></td>
+                    <td className="px-4 py-3 text-center"><span className="text-xs text-slate-300">—</span></td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <button onClick={()=>startEdit(l)} className="text-xs font-bold text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-2 py-1 rounded transition-colors">編集</button>
+                        {onDuplicate && <button onClick={()=>onDuplicate(l)} title="このデータを複製して当日の入力に使う" className="text-xs font-bold text-emerald-600 hover:text-emerald-800 border border-emerald-200 hover:border-emerald-400 px-2 py-1 rounded transition-colors">複製</button>}
+                        <button onClick={()=>setDeleteConfirm(l)} className="text-xs font-bold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors">削除</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+
                 return (
                   <tr key={l.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{fmtDateDow(l.date)}</td>
@@ -2150,6 +2508,7 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={()=>startEdit(l)} className="text-xs font-bold text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-2 py-1 rounded transition-colors">編集</button>
+                        {onDuplicate && <button onClick={()=>onDuplicate(l)} title="このデータを複製して当日の入力に使う" className="text-xs font-bold text-emerald-600 hover:text-emerald-800 border border-emerald-200 hover:border-emerald-400 px-2 py-1 rounded transition-colors">複製</button>}
                         <button onClick={()=>setDeleteConfirm(l)} className="text-xs font-bold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors">削除</button>
                       </div>
                     </td>
@@ -2204,7 +2563,7 @@ function ListScreen({ logs, users, projects, targets, depts, workContents, total
 
 // ===================== 集計画面 =====================
 function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onExpandRange, onFetchLogsByRange, onFetchYoY, onUpdateTarget, currentUser, isLeader, onFetchTargetHistory }) {
-  const [filter, setFilter]  = usePersistedState('summary.filter',   { dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'', afterShipment:'' });
+  const [filter, setFilter]  = usePersistedState('summary.filter',   { dateFrom:'', dateTo:'', dept:'', userId:'', projectNos:[], location:'', afterShipment:'' });
   const [sortMode, setSortMode] = usePersistedState('summary.sortMode','hours_desc');
   const [csvMode, setCsvMode]  = usePersistedState('summary.csvMode', 'basic');
   const [editTarget, setEditTarget] = useState(null); // { userId, projectNo, value, reason }
@@ -2219,6 +2578,20 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
   const [fySel,  setFySel]    = usePersistedState('summary.fySel',  { fy: currentFy, half: currentHalf });
   const [yoyData, setYoyData] = useState(null); // { current, previous }
   const [yoyLoading, setYoyLoading] = useState(false);
+
+  // 日付フィルターが読み込み済み範囲より過去になったら自動でサーバーから追加取得
+  // （手動入力やリセット後に dateFrom が広がったときも、自動で過去データをロード）
+  useEffect(() => {
+    if (!loadedRange || !onExpandRange) return;
+    const tid = setTimeout(() => {
+      if (!filter.dateFrom || filter.dateFrom >= loadedRange.from) return;
+      const [ly, lm] = loadedRange.from.split('-').map(Number);
+      const [fy, fm] = filter.dateFrom.split('-').map(Number);
+      const diffMonths = (ly - fy) * 12 + (lm - fm);
+      if (diffMonths > 0) onExpandRange(diffMonths);
+    }, 500);
+    return () => clearTimeout(tid);
+  }, [filter.dateFrom, loadedRange, onExpandRange]);
 
   // 期選択が変わったらフィルターの dateFrom/dateTo を計算、必要なら過去ログをロード
   const applyFiscalSelection = async (mode, sel) => {
@@ -2274,8 +2647,11 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
   const ff = p => setFilter(prev => ({ ...prev, ...p }));
   const deptUsers = filter.dept ? users.filter(u=>u.department===filter.dept) : users;
 
-  const filteredLogs = useMemo(() => {
-    return logs.filter(l => {
+  // projectNos 以外のフィルター適用ログ（=注番マルチセレクトの候補ベース）と、
+  // それに projectNos も適用した最終フィルター結果を一度に計算する。
+  // availableProjectNos: 「他のフィルターに該当する注番」だけをチェック候補にするため。
+  const { filteredLogs, availableProjectNos } = useMemo(() => {
+    const baseMatch = (l) => {
       if (filter.dateFrom && l.date < filter.dateFrom) return false;
       if (filter.dateTo   && l.date > filter.dateTo)   return false;
       if (filter.userId   && l.userId !== Number(filter.userId)) return false;
@@ -2284,30 +2660,31 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
         const recDept = l.department || users.find(u=>u.id===l.userId)?.department;
         if (recDept !== filter.dept) return false;
       }
-      if (filter.projectNoMode === 'none') {
-        if (l.projectNo) return false; // 注番なしのみ
-      } else if (filter.projectNoMode === 'has') {
-        if (!l.projectNo) return false; // 注番ありのみ
-      }
-      if (filter.projectNo && filter.projectNoMode !== 'none') {
-        const q = filter.projectNo.toLowerCase();
-        if (!(l.projectNo || '').toLowerCase().includes(q)) return false;
-      }
       if (filter.location && l.location !== filter.location) return false;
       if (filter.afterShipment === 'yes' && !l.afterShipment) return false;
       if (filter.afterShipment === 'no'  &&  l.afterShipment) return false;
       return true;
-    });
+    };
+    const baseLogs = logs.filter(baseMatch);
+    const avail = new Set();
+    baseLogs.forEach(l => avail.add(l.projectNo || NO_PROJECT_KEY));
+    const finalLogs = (filter.projectNos && filter.projectNos.length > 0)
+      ? baseLogs.filter(l => filter.projectNos.includes(l.projectNo || NO_PROJECT_KEY))
+      : baseLogs;
+    return { filteredLogs: finalLogs, availableProjectNos: avail };
   }, [logs, filter, users]);
 
   const summaryData = useMemo(() => {
     const map = {};
     filteredLogs.forEach(l => {
       const key = l.projectNo || '__NO_PROJECT__';
-      if (!map[key]) map[key] = { no: l.projectNo, total: 0, users: {} };
-      map[key].total += Number(l.hours||0);
+      if (!map[key]) map[key] = { no: l.projectNo, total: 0, inside: 0, outside: 0, users: {} };
+      const h = Number(l.hours||0);
+      map[key].total += h;
+      if (l.location === '社外') map[key].outside += h;
+      else map[key].inside += h;
       if (!map[key].users[l.userId]) map[key].users[l.userId] = 0;
-      map[key].users[l.userId] += Number(l.hours||0);
+      map[key].users[l.userId] += h;
     });
     const arr = Object.values(map).map(p => {
       const userEntries = Object.entries(p.users).map(([uid,h]) => ({ uid:Number(uid), h })).sort((a,b)=>b.h-a.h);
@@ -2331,15 +2708,15 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
     let csv = '', fname = '';
     const NP = '(注番なし)';
     if (csvMode==='basic') {
-      csv = '注番,客先,件名,合計時間(h)\n';
+      csv = '注番,客先,件名,合計時間(h),社内時間(h),社外時間(h)\n';
       summaryData.forEach(s => {
         const p = s.no ? (projects.find(p=>p.no===s.no)||{}) : {};
         const noLabel = s.no || NP;
-        csv += `"${noLabel}","${p.client||''}","${p.subject||''}",${s.total.toFixed(1)}\n`;
+        csv += `"${noLabel}","${p.client||''}","${p.subject||''}",${s.total.toFixed(1)},${s.inside.toFixed(1)},${s.outside.toFixed(1)}\n`;
       });
       fname = `作業集計_基本_${today()}.csv`;
     } else if (csvMode==='monthly') {
-      csv = '対象月,注番,客先,件名,合計時間(h)\n';
+      csv = '対象月,注番,客先,件名,合計時間(h),社内時間(h),社外時間(h)\n';
       const map = {};
       filteredLogs.forEach(l => {
         const m = ym(l.date);
@@ -2347,14 +2724,17 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
         const k = `${m}__${pno}`;
         if (!map[k]) {
           const p = l.projectNo ? (projects.find(p=>p.no===l.projectNo)||{}) : {};
-          map[k] = { m, no:l.projectNo, client:p.client||'', subject:p.subject||'', h:0 };
+          map[k] = { m, no:l.projectNo, client:p.client||'', subject:p.subject||'', h:0, inside:0, outside:0 };
         }
-        map[k].h += Number(l.hours||0);
+        const h = Number(l.hours||0);
+        map[k].h += h;
+        if (l.location === '社外') map[k].outside += h;
+        else map[k].inside += h;
       });
       const noKey = r => r.no || '\uffff';
       Object.values(map).sort((a,b)=>a.m.localeCompare(b.m)||noKey(a).localeCompare(noKey(b))).forEach(r => {
         const noLabel = r.no || NP;
-        csv += `"${ymJP(r.m)}","${noLabel}","${r.client}","${r.subject}",${r.h.toFixed(1)}\n`;
+        csv += `"${ymJP(r.m)}","${noLabel}","${r.client}","${r.subject}",${r.h.toFixed(1)},${r.inside.toFixed(1)},${r.outside.toFixed(1)}\n`;
       });
       fname = `作業集計_月別_${today()}.csv`;
     } else if (csvMode==='target') {
@@ -2547,6 +2927,14 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
             <input type="date" value={filter.dateFrom} onChange={e=>ff({ dateFrom:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
             <span className="text-slate-400 text-xs">〜</span>
             <input type="date" value={filter.dateTo} onChange={e=>ff({ dateTo:e.target.value })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"/>
+            <button onClick={()=>{
+                const now = new Date();
+                const from = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+                ff({ dateFrom: from, dateTo: today() });
+                setFyMode('custom');
+              }}
+              className="text-[11px] font-bold text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg px-2 py-1.5 transition-colors"
+              title="今月の1日から今日までを設定（期は手動に切替）">今月</button>
           </div>
           <select value={filter.dept} onChange={e=>ff({ dept:e.target.value, userId:'' })} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
             <option value="">全部署</option>
@@ -2556,19 +2944,7 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
             <option value="">全担当者</option>
             {deptUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
-          <select value={filter.projectNoMode || ''} onChange={e=>ff({ projectNoMode:e.target.value, projectNo: e.target.value==='none' ? '' : filter.projectNo })}
-            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
-            <option value="">注番すべて</option>
-            <option value="has">注番ありのみ</option>
-            <option value="none">注番なしのみ</option>
-          </select>
-          <input type="text" value={filter.projectNo} onChange={e=>ff({ projectNo:e.target.value })}
-            list="summary-projects-datalist" placeholder="注番（部分一致）"
-            disabled={filter.projectNoMode==='none'}
-            className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 w-36 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"/>
-          <datalist id="summary-projects-datalist">
-            {projects.map(p=><option key={p.no} value={p.no}>{p.client} / {p.subject}</option>)}
-          </datalist>
+          <ProjectMultiSelect projects={projects} selected={filter.projectNos || []} onChange={v=>ff({ projectNos: v })} availableNos={availableProjectNos}/>
           <select value={filter.location || ''} onChange={e=>ff({ location:e.target.value })}
             className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
             <option value="">場所すべて</option>
@@ -2581,7 +2957,7 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
             <option value="yes">出荷後対応のみ</option>
             <option value="no">出荷後対応以外</option>
           </select>
-          <button onClick={()=>{ setFilter({ dateFrom:'', dateTo:'', dept:'', userId:'', projectNo:'', projectNoMode:'', location:'', afterShipment:'' }); clearPref('summary.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
+          <button onClick={()=>{ setFilter({ dateFrom:'', dateTo:'', dept:'', userId:'', projectNos:[], location:'', afterShipment:'' }); clearPref('summary.filter'); }} className="text-xs text-slate-500 hover:text-slate-700 border rounded-lg px-2 py-1.5 transition-colors">リセット</button>
           <div className="ml-auto flex items-center gap-2">
             <label className="text-xs font-bold text-slate-500">並び替え：</label>
             <select value={sortMode} onChange={e=>setSortMode(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400">
@@ -2660,7 +3036,9 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
                 {s.userEntries.map(({uid, h}, i) => {
                   const user   = users.find(u=>u.id===uid);
                   const name   = user?.name || '不明';
-                  const target = s.no ? findTarget(targets, uid, s.no)?.targetHours : null;
+                  const targetRecord = s.no ? findTarget(targets, uid, s.no) : null;
+                  const target = targetRecord?.targetHours ?? null;
+                  const hasHistory = !!targetRecord?.hasHistory;
                   const diff   = target ? (h - target) : null;
                   const rate   = target ? (h/target*100) : null;
                   const isEditingT = editTarget && editTarget.userId === uid && editTarget.projectNo === s.no;
@@ -2688,8 +3066,13 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
                               </button>
                               {target && (
                                 <button type="button" onClick={()=>openHistory(uid, s.no, name)}
-                                  className="text-[10px] text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded px-1" title="変更履歴を見る">
-                                  履歴
+                                  className={`text-[10px] rounded px-1 border transition-colors ${
+                                    hasHistory
+                                      ? 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
+                                      : 'text-slate-300 border-transparent hover:text-slate-500 hover:border-slate-200'
+                                  }`}
+                                  title={hasHistory ? '変更履歴を見る' : '編集履歴はまだありません'}>
+                                  {hasHistory ? '履歴●' : '履歴'}
                                 </button>
                               )}
                             </span>
@@ -2782,12 +3165,16 @@ function SummaryScreen({ logs, users, projects, targets, depts, loadedRange, onE
 }
 
 // ===================== 環境設定画面 =====================
-function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDeleteUser, onSaveWorkContents, onAddDept, onRenameDept, onDeleteDept, onUpdateProject, onResetPin, currentUser }) {
-  const [subTab, setSubTab]     = useState('users');
+function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDeleteUser, onSaveWorkContents, onAddDept, onRenameDept, onDeleteDept, onUpdateProject, onResetPin, onFetchCalendar, onSaveCalendarEntry, onDeleteCalendarEntry, currentUser, isAdmin, isLeader }) {
+  // リーダー（非admin）は「作業内容マスタ」サブタブのみ操作可能。
+  // 編集対象部署は自分の所属部署に固定する。
+  const leaderOnly = !isAdmin && isLeader;
+  const ownDept    = currentUser?.department || '';
+  const [subTab, setSubTab]     = useState(leaderOnly ? 'work' : 'users');
   const [userForm, setUserForm] = useState({ id:null, name:'', department:depts[0]||'', email:'', role:'member' });
   const [editUserId, setEditUserId] = useState(null);
-  const [selectedDept, setSelectedDept] = useState(depts[0]||'');
-  const [wItems, setWItems]     = useState(workContents[depts[0]]||[]);
+  const [selectedDept, setSelectedDept] = useState(leaderOnly ? ownDept : (depts[0]||''));
+  const [wItems, setWItems]     = useState(workContents[leaderOnly ? ownDept : depts[0]]||[]);
   const [newItem, setNewItem]   = useState('');
   const [newDept, setNewDept]   = useState('');
   const [editDept, setEditDept] = useState(null); // { old, value }
@@ -2797,6 +3184,66 @@ function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDe
   const [projShowClosed, setProjShowClosed] = useState(false);
   const [editProj, setEditProj] = useState(null); // { no, client, subject, isClosed }
   const pf = p => setEditProj(prev => ({ ...prev, ...p }));
+
+  // 会社カレンダー（営業日上書き）
+  const currentYear = new Date().getFullYear();
+  const [calYear, setCalYear]       = useState(currentYear);
+  const [calData, setCalData]       = useState(null);   // { year, days: [...] }
+  const [calLoading, setCalLoading] = useState(false);
+  const [calEdit, setCalEdit]       = useState(null);   // 編集中セル { date, mode, note, dow, isWeekend, isJpHoliday }
+  const reloadCalendar = async (year) => {
+    if (!onFetchCalendar) return;
+    setCalLoading(true);
+    const d = await onFetchCalendar(year);
+    if (d) setCalData(d);
+    setCalLoading(false);
+  };
+  useEffect(() => {
+    if (subTab === 'calendar') reloadCalendar(calYear);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subTab, calYear]);
+  const cellColor = (d) => {
+    if (d.override) return d.override.isHoliday ? 'bg-rose-200 hover:bg-rose-300' : 'bg-emerald-200 hover:bg-emerald-300';
+    if (d.isJpHoliday) return 'bg-rose-100 hover:bg-rose-200';
+    if (d.dow === 0)   return 'bg-rose-50 hover:bg-rose-100';
+    if (d.dow === 6)   return 'bg-sky-50 hover:bg-sky-100';
+    return 'bg-white hover:bg-slate-100';
+  };
+  const cellTextColor = (d) => {
+    if (d.override && d.override.isHoliday) return 'text-rose-900';
+    if (d.override && !d.override.isHoliday) return 'text-emerald-900';
+    if (d.isJpHoliday || d.dow === 0) return 'text-rose-600';
+    if (d.dow === 6) return 'text-sky-600';
+    return 'text-slate-700';
+  };
+  const openCellEditor = (d) => {
+    const mode = d.override
+      ? (d.override.isHoliday ? 'holiday' : 'business')
+      : 'default';
+    setCalEdit({
+      date: d.date,
+      dow: d.dow,
+      isWeekend: d.isWeekend,
+      isJpHoliday: d.isJpHoliday,
+      mode,
+      note: (d.override && d.override.note) || '',
+    });
+  };
+  const saveCellEditor = async () => {
+    if (!calEdit) return;
+    setSaving(true);
+    let ok = false;
+    if (calEdit.mode === 'default') {
+      ok = await onDeleteCalendarEntry(calEdit.date);
+    } else {
+      ok = await onSaveCalendarEntry(calEdit.date, calEdit.mode === 'holiday', calEdit.note);
+    }
+    setSaving(false);
+    if (ok) {
+      setCalEdit(null);
+      await reloadCalendar(calYear);
+    }
+  };
 
   // 登録済みユーザー一覧のグループ絞り込み（永続化して再マウント時も保持）
   const [userListDeptFilter, setUserListDeptFilter] = usePersistedState('settings.userListDeptFilter', '');
@@ -2839,7 +3286,7 @@ function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDe
   //   更新されており、こちらの wItems は保存時点の items と同値なので、
   //   追加同期は不要。
   useEffect(() => { setWItems(workContents[selectedDept]||[]); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [selectedDept]);
-  useEffect(() => { if (!depts.includes(selectedDept) && depts.length) setSelectedDept(depts[0]); }, [depts]);
+  useEffect(() => { if (!depts.includes(selectedDept) && depts.length) setSelectedDept(leaderOnly ? ownDept : depts[0]); }, [depts]);
   useEffect(() => { if (!depts.includes(userForm.department) && depts.length) setUserForm(f=>({...f,department:depts[0]})); }, [depts]);
 
   const uf = p => setUserForm(prev => ({ ...prev, ...p }));
@@ -2908,11 +3355,12 @@ function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDe
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex border-b border-slate-200">
           {[
-            { id:'users',    icon:<IUser s={16}/>,   label:'ユーザー管理' },
-            { id:'groups',   icon:<IUsers s={16}/>,  label:'グループ管理' },
-            { id:'work',     icon:<IList s={16}/>,   label:'作業内容マスタ' },
-            { id:'projects', icon:<IFolder s={16}/>, label:'注番管理' },
-          ].map(({ id, icon, label }) => (
+            { id:'users',    icon:<IUser s={16}/>,     label:'ユーザー管理',     adminOnly:true },
+            { id:'groups',   icon:<IUsers s={16}/>,    label:'グループ管理',     adminOnly:true },
+            { id:'work',     icon:<IList s={16}/>,     label:'作業内容マスタ',   adminOnly:false },
+            { id:'projects', icon:<IFolder s={16}/>,   label:'注番管理',         adminOnly:true },
+            { id:'calendar', icon:<ICalendar s={16}/>, label:'会社カレンダー',   adminOnly:true },
+          ].filter(t => isAdmin || !t.adminOnly).map(({ id, icon, label }) => (
             <button key={id} onClick={()=>setSubTab(id)}
               className={`flex items-center gap-2 px-6 py-3.5 text-sm font-bold transition-all border-b-2 ${subTab===id ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>
               {icon}{label}
@@ -3088,13 +3536,18 @@ function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDe
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="text-sm font-bold text-slate-600">部署を選択：</label>
                 <div className="flex flex-wrap gap-2">
-                  {depts.map(d => (
+                  {(leaderOnly ? depts.filter(d => d === ownDept) : depts).map(d => (
                     <button key={d} onClick={()=>setSelectedDept(d)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${selectedDept===d ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
                       {d}
                     </button>
                   ))}
                 </div>
+                {leaderOnly && (
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                    ※ リーダー権限：自グループ「{ownDept}」のみ編集可
+                  </span>
+                )}
               </div>
 
               <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -3215,8 +3668,120 @@ function SettingsScreen({ users, depts, projects, workContents, onSaveUser, onDe
               </div>
             </div>
           )}
+
+          {/* 会社カレンダー */}
+          {subTab==='calendar' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-xs font-bold text-slate-500">対象年:</label>
+                {[currentYear, currentYear + 1].map(y => (
+                  <button key={y} onClick={()=>setCalYear(y)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${calYear===y ? 'bg-blue-600 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                    {y}年
+                  </button>
+                ))}
+                <div className="ml-auto flex items-center gap-3 text-[11px] font-bold">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-white border border-slate-300"/>平日営業</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-sky-50 border border-sky-200"/>土</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-rose-50 border border-rose-200"/>日</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-rose-100 border border-rose-300"/>祝日</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-rose-200 border border-rose-400"/>会社休業</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-200 border border-emerald-400"/>会社出勤</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                日付をクリックすると「デフォルト／休業日／営業日」を切り替えできます。デフォルトは土日祝休み。
+              </p>
+
+              {calLoading && <p className="text-sm text-slate-400 text-center py-8"><IRefresh s={14} c="inline animate-spin mr-1"/> 読み込み中...</p>}
+
+              {!calLoading && calData && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array.from({ length: 12 }).map((_, monthIdx) => {
+                    const monthDays = calData.days.filter(d => {
+                      const m = parseInt(d.date.split('-')[1], 10);
+                      return m === monthIdx + 1;
+                    });
+                    const firstDow = monthDays.length > 0 ? monthDays[0].dow : 0;
+                    const blanks = Array.from({ length: firstDow });
+                    return (
+                      <div key={monthIdx} className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-black text-slate-700">
+                          {calYear}年 {monthIdx + 1}月
+                        </div>
+                        <div className="grid grid-cols-7 gap-px bg-slate-200">
+                          {['日','月','火','水','木','金','土'].map((w, i) => (
+                            <div key={w} className={`bg-slate-100 text-center text-[10px] font-black py-1 ${i===0?'text-rose-600':i===6?'text-sky-600':'text-slate-500'}`}>{w}</div>
+                          ))}
+                          {blanks.map((_, i) => <div key={'b'+i} className="bg-white"/>)}
+                          {monthDays.map(d => {
+                            const day = parseInt(d.date.split('-')[2], 10);
+                            return (
+                              <button key={d.date} onClick={()=>openCellEditor(d)}
+                                title={d.override?.note || ''}
+                                className={`relative text-xs font-bold py-1.5 ${cellColor(d)} ${cellTextColor(d)} transition-colors`}>
+                                {day}
+                                {d.override && <span className="absolute top-0 right-0.5 text-[8px]">●</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* 会社カレンダー セル編集モーダル */}
+      {calEdit && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={()=>setCalEdit(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl" onClick={e=>e.stopPropagation()}>
+            <h3 className="font-black text-slate-800 mb-1">{calEdit.date} の設定</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              {['日','月','火','水','木','金','土'][calEdit.dow]}曜日
+              {calEdit.isJpHoliday && <span className="ml-1 text-rose-600 font-bold">（祝日）</span>}
+              <span className="block mt-1">
+                デフォルトでは{(calEdit.isWeekend || calEdit.isJpHoliday) ? '休業日' : '営業日'}として扱われます。
+              </span>
+            </p>
+            <div className="space-y-2 mb-4">
+              {[
+                { v:'default',  label:'デフォルト（土日祝のルールに従う）' },
+                { v:'holiday',  label:'休業日にする（平日でも休み）' },
+                { v:'business', label:'営業日にする（土日祝でも出勤）' },
+              ].map(opt => (
+                <label key={opt.v} className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer ${calEdit.mode===opt.v ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input type="radio" name="calMode" checked={calEdit.mode===opt.v}
+                    onChange={()=>setCalEdit(prev=>({ ...prev, mode: opt.v }))}
+                    className="mt-0.5"/>
+                  <span className="text-xs font-bold text-slate-700">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            {calEdit.mode !== 'default' && (
+              <div className="mb-4">
+                <label className="text-xs font-bold text-slate-500">メモ（任意）</label>
+                <input value={calEdit.note}
+                  onChange={e=>setCalEdit(prev=>({ ...prev, note: e.target.value }))}
+                  placeholder="例：社員旅行、年末休み"
+                  className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 mt-1"/>
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button onClick={()=>setCalEdit(null)} className="border px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">キャンセル</button>
+              <button onClick={saveCellEditor} disabled={saving}
+                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:bg-slate-300 flex items-center gap-1">
+                {saving ? <IRefresh s={14} c="animate-spin"/> : <ISave s={14}/>} 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 削除確認モーダル */}
       {confirm && (

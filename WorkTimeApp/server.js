@@ -277,10 +277,35 @@ const JAPANESE_HOLIDAYS = new Set([
     '2027-11-23', // 勤労感謝の日
 ]);
 
-// 会社独自の休業日（必要時に追加）
-//   例: '2026-12-30', '2026-12-31' など
-const COMPANY_HOLIDAYS = new Set([
-]);
+// 会社カレンダー（管理者が設定する営業日/休業日の上書き）
+//   キー: 'YYYY-MM-DD'
+//   値 : { isHoliday: boolean, note: string | null }
+//   isHoliday = true  → 会社休業日（平日でも休み）
+//   isHoliday = false → 営業日（土日祝でも出勤）
+// Map に存在しない日付はデフォルトルール（土日祝=休業、それ以外=営業）。
+//
+// 起動時および mutation 時に DB から再ロードする。
+const companyCalendar = new Map();
+
+async function loadCompanyCalendar() {
+    try {
+        const pool = await getPool();
+        const result = await pool.request().query(
+            'SELECT CalendarDate, IsHoliday, Note FROM CompanyCalendar'
+        );
+        companyCalendar.clear();
+        for (const row of result.recordset) {
+            const key = formatDateLocal(row.CalendarDate);
+            companyCalendar.set(key, {
+                isHoliday: row.IsHoliday === true || row.IsHoliday === 1,
+                note: row.Note || null,
+            });
+        }
+        console.log(`📅 CompanyCalendar を ${companyCalendar.size} 件ロードしました。`);
+    } catch (err) {
+        console.error('CompanyCalendar ロード失敗:', err.message);
+    }
+}
 
 // YYYY-MM-DD 形式の文字列を「ローカル時刻」の Date にして、
 // 同じフォーマットに戻す軽量ヘルパー
@@ -291,15 +316,20 @@ function formatDateLocal(d) {
     return `${y}-${m}-${day}`;
 }
 
-// 営業日判定（土日・祝日・会社休業日を除外）
+// 営業日判定
+//   優先度: 会社カレンダーの上書き > 土日 > 祝日 > 平日営業
+//   - companyCalendar に該当日がある → その isHoliday に従う
+//   - 無ければデフォルトルール（土日祝=休業、それ以外=営業）
 function isBusinessDay(dateStr) {
     // dateStr: 'YYYY-MM-DD' (ローカル日付)
+    const override = companyCalendar.get(dateStr);
+    if (override) return !override.isHoliday;
+
     const [y, m, d] = dateStr.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
     const dow = dt.getDay();
     if (dow === 0 || dow === 6) return false;     // 土日
     if (JAPANESE_HOLIDAYS.has(dateStr)) return false;
-    if (COMPANY_HOLIDAYS.has(dateStr))  return false;
     return true;
 }
 
@@ -714,6 +744,7 @@ app.get('/api/init-data', authMiddleware, async (req, res) => {
                 w.WorkHours       AS hours,
                 w.WorkLocation    AS location,
                 w.IsAfterShipment AS afterShipment,
+                w.IsPaidLeave     AS isPaidLeave,
                 w.Details         AS details
             FROM WorkLogs AS w
             INNER JOIN Departments AS d ON d.DepartmentID = w.DepartmentID
@@ -754,13 +785,21 @@ app.get('/api/init-data', authMiddleware, async (req, res) => {
         `);
 
         // 目標時間マスタ
+        //   hasHistory: その (UserID, ProjectNo) の組に対して TargetChangeLog が
+        //   1 件でも存在するか。クライアントで「履歴ボタン」の見た目（色）を
+        //   切り替えるために返す。
         const targetsResult = await pool.request().query(`
             SELECT
-                TargetID    AS id,
-                UserID      AS userId,
-                ProjectNo   AS projectNo,
-                TargetHours AS targetHours
-            FROM ProjectTargets
+                pt.TargetID    AS id,
+                pt.UserID      AS userId,
+                pt.ProjectNo   AS projectNo,
+                pt.TargetHours AS targetHours,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM TargetChangeLog tcl
+                     WHERE tcl.UserID = pt.UserID
+                       AND tcl.ProjectNo = pt.ProjectNo
+                ) THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS hasHistory
+            FROM ProjectTargets pt
         `);
 
         // 作業内容を { 部署名: [内容名, ...] } の形に変換
@@ -827,12 +866,15 @@ app.post('/api/logs', authMiddleware, async (req, res) => {
         if (Number(data.userId) !== Number(req.user.userId)) {
             return res.status(403).json({ error: '他のユーザーとして作業記録を登録することはできません' });
         }
+        // 有給休暇モード: 注番/作業内容/時間は固定、内容詳細不要
+        const isPaidLeave = !!data.isPaidLeave;
         // 注番の有無判定（空文字/undefined/null はすべて「注番なし」扱い）
-        const hasProject = data.projectNo != null && String(data.projectNo).trim() !== '';
+        // 有給休暇の場合は強制的に「注番なし」扱い
+        const hasProject = !isPaidLeave && data.projectNo != null && String(data.projectNo).trim() !== '';
         const projectNo  = hasProject ? String(data.projectNo).trim() : null;
 
-        // 注番なし作業は 内容詳細 必須
-        if (!hasProject && (!data.details || String(data.details).trim() === '')) {
+        // 注番なし作業は 内容詳細 必須（ただし有給休暇は免除）
+        if (!isPaidLeave && !hasProject && (!data.details || String(data.details).trim() === '')) {
             return res.status(400).json({ error: '注番なしの作業記録は内容詳細が必須です。' });
         }
 
@@ -906,22 +948,30 @@ app.post('/api/logs', authMiddleware, async (req, res) => {
             const snapshotDeptId = deptResolve.recordset[0].DepartmentID;
 
             // 作業記録を挿入
+            // 有給休暇の場合: 作業内容=「有給休暇」固定、時間=0、場所/出荷後対応/詳細は無視
+            const finalContent  = isPaidLeave ? '有給休暇' : data.content;
+            const finalHours    = isPaidLeave ? 0 : data.hours;
+            const finalLocation = isPaidLeave ? '社内' : (data.location || '社内');
+            const finalAfterShp = isPaidLeave ? 0 : (data.afterShipment ? 1 : 0);
+            const finalDetails  = isPaidLeave ? '' : (data.details || '');
+
             const result = await new sql.Request(tx)
                 .input('ProjectNo',      sql.NVarChar(50),    projectNo)
                 .input('WorkDate',       sql.Date,            data.date)
                 .input('UserID',         sql.Int,             data.userId)
                 .input('DepartmentID',   sql.Int,             snapshotDeptId)
-                .input('ContentName',    sql.NVarChar(100),   data.content)
-                .input('WorkHours',      sql.Decimal(5, 2),   data.hours)
-                .input('WorkLocation',   sql.NVarChar(10),    data.location    || '社内')
-                .input('IsAfterShipment',sql.Bit,             data.afterShipment ? 1 : 0)
-                .input('Details',        sql.NVarChar(sql.MAX), data.details   || '')
+                .input('ContentName',    sql.NVarChar(100),   finalContent)
+                .input('WorkHours',      sql.Decimal(5, 2),   finalHours)
+                .input('WorkLocation',   sql.NVarChar(10),    finalLocation)
+                .input('IsAfterShipment',sql.Bit,             finalAfterShp)
+                .input('IsPaidLeave',    sql.Bit,             isPaidLeave ? 1 : 0)
+                .input('Details',        sql.NVarChar(sql.MAX), finalDetails)
                 .query(`
                     INSERT INTO WorkLogs
-                        (ProjectNo, WorkDate, UserID, DepartmentID, ContentName, WorkHours, WorkLocation, IsAfterShipment, Details)
+                        (ProjectNo, WorkDate, UserID, DepartmentID, ContentName, WorkHours, WorkLocation, IsAfterShipment, IsPaidLeave, Details)
                     OUTPUT INSERTED.LogID
                     VALUES
-                        (@ProjectNo, @WorkDate, @UserID, @DepartmentID, @ContentName, @WorkHours, @WorkLocation, @IsAfterShipment, @Details)
+                        (@ProjectNo, @WorkDate, @UserID, @DepartmentID, @ContentName, @WorkHours, @WorkLocation, @IsAfterShipment, @IsPaidLeave, @Details)
                 `);
             mark('insertWorkLog');
 
@@ -938,7 +988,9 @@ app.post('/api/logs', authMiddleware, async (req, res) => {
                     id: targetRecord.TargetID,
                     userId: targetRecord.UserID,
                     projectNo: targetRecord.ProjectNo,
-                    targetHours: Number(targetRecord.TargetHours)
+                    targetHours: Number(targetRecord.TargetHours),
+                    // この経路では TargetChangeLog を書いていないので false
+                    hasHistory: false
                 } : null
             });
 
@@ -964,6 +1016,31 @@ app.put('/api/logs/:id', authMiddleware, async (req, res) => {
         const data  = req.body;
         const pool  = await getPool();
 
+        // 対象ログの現在の状態を取得（有給休暇かどうかで分岐するため）
+        const existing = await pool.request()
+            .input('LogID', sql.BigInt, logId)
+            .query('SELECT IsPaidLeave FROM WorkLogs WHERE LogID = @LogID AND IsDeleted = 0');
+        if (existing.recordset.length === 0) {
+            return res.status(404).json({ error: '対象の作業記録が見つかりません' });
+        }
+        const wasPaidLeave = existing.recordset[0].IsPaidLeave === true
+                          || existing.recordset[0].IsPaidLeave === 1;
+
+        // 有給休暇ログの編集は「作業日」のみ許可（区分変更は不可）
+        if (wasPaidLeave) {
+            await pool.request()
+                .input('LogID',    sql.BigInt, logId)
+                .input('WorkDate', sql.Date,   data.date)
+                .query(`
+                    UPDATE WorkLogs
+                    SET WorkDate  = @WorkDate,
+                        UpdatedAt = GETDATE()
+                    WHERE LogID = @LogID
+                `);
+            return res.json({ success: true });
+        }
+
+        // 通常ログの編集
         const hasProject = data.projectNo != null && String(data.projectNo).trim() !== '';
         const projectNo  = hasProject ? String(data.projectNo).trim() : null;
         if (!hasProject && (!data.details || String(data.details).trim() === '')) {
@@ -1057,7 +1134,8 @@ app.get('/api/me/input-status', authMiddleware, async (req, res) => {
         const result = await request.query(`
             SELECT CONVERT(CHAR(10), WorkDate, 23) AS WorkDateStr,
                    SUM(WorkHours) AS Hours,
-                   COUNT(*) AS LogCount
+                   COUNT(*) AS LogCount,
+                   SUM(CASE WHEN IsPaidLeave = 1 THEN 1 ELSE 0 END) AS PaidLeaveCount
               FROM WorkLogs
              WHERE UserID = @UserID
                AND IsDeleted = 0
@@ -1067,9 +1145,11 @@ app.get('/api/me/input-status', authMiddleware, async (req, res) => {
 
         const hoursByDate = {};
         const countByDate = {};
+        const paidByDate  = {};
         for (const row of result.recordset) {
             hoursByDate[row.WorkDateStr] = Number(row.Hours) || 0;
             countByDate[row.WorkDateStr] = Number(row.LogCount) || 0;
+            paidByDate[row.WorkDateStr]  = Number(row.PaidLeaveCount) || 0;
         }
 
         const payload = businessDays.map(d => {
@@ -1078,11 +1158,12 @@ app.get('/api/me/input-status', authMiddleware, async (req, res) => {
             const dow = new Date(y, m - 1, day).getDay();
             const h = hoursByDate[d] || 0;
             return {
-                date:   d,
+                date:    d,
                 dow,
-                hours:  Math.round(h * 100) / 100,
-                count:  countByDate[d] || 0,
-                logged: (countByDate[d] || 0) > 0
+                hours:   Math.round(h * 100) / 100,
+                count:   countByDate[d] || 0,
+                logged:  (countByDate[d] || 0) > 0,
+                isPaidLeave: (paidByDate[d] || 0) > 0
             };
         });
 
@@ -1148,6 +1229,7 @@ app.get('/api/logs', authMiddleware, async (req, res) => {
                 w.WorkHours       AS hours,
                 w.WorkLocation    AS location,
                 w.IsAfterShipment AS afterShipment,
+                w.IsPaidLeave     AS isPaidLeave,
                 w.Details         AS details
             FROM WorkLogs AS w
             INNER JOIN Departments AS d ON d.DepartmentID = w.DepartmentID
@@ -1279,7 +1361,9 @@ app.put('/api/targets', authMiddleware, async (req, res) => {
                     id:          record.TargetID,
                     userId:      record.UserID,
                     projectNo:   record.ProjectNo,
-                    targetHours: Number(record.TargetHours)
+                    targetHours: Number(record.TargetHours),
+                    // 上の INSERT で TargetChangeLog に少なくとも 1 行入っている
+                    hasHistory:  true
                 }
             });
         } catch (innerErr) {
@@ -1495,11 +1579,27 @@ app.delete('/api/users/:id', authMiddleware, requireRole('admin'), async (req, r
 // 7. PUT /api/work-contents/:dept
 //    部署の作業内容マスタを一括更新
 // ============================================================
-app.put('/api/work-contents/:dept', authMiddleware, requireRole('admin'), async (req, res) => {
+app.put('/api/work-contents/:dept', authMiddleware, requireRole('admin', 'leader'), async (req, res) => {
     try {
         const dept  = decodeURIComponent(req.params.dept);
         const items = req.body.items; // 文字列の配列
         const pool  = await getPool();
+
+        // リーダーは自分の所属部署のみ編集可
+        if (req.user.role === 'leader') {
+            const own = await pool.request()
+                .input('UserID', sql.Int, req.user.userId)
+                .query(`
+                    SELECT d.DepartmentName
+                    FROM Users u JOIN Departments d ON u.DepartmentID = d.DepartmentID
+                    WHERE u.UserID = @UserID
+                `);
+            const ownDept = own.recordset[0]?.DepartmentName;
+            if (!ownDept || ownDept !== dept) {
+                return res.status(403).json({ error: '自分が所属するグループの作業内容マスタのみ変更できます', code: 'FORBIDDEN' });
+            }
+        }
+
         const tx    = new sql.Transaction(pool);
         await tx.begin();
 
@@ -1802,6 +1902,116 @@ app.get('/api/stats/yoy', authMiddleware, async (req, res) => {
 });
 
 // ============================================================
+// 会社カレンダー API
+//   - GET  /api/calendar/:year         …1年分の日付ごとの状態を返す
+//   - PUT  /api/calendar/entry         …日付ごとの上書きを作成/更新（admin）
+//   - DELETE /api/calendar/:date       …上書きを解除してデフォルトに戻す（admin）
+// ============================================================
+
+// GET /api/calendar/:year
+//   その年の 1/1〜12/31 の各日について
+//     { date, dow, isBusinessDay, isWeekend, isJpHoliday, override? }
+//   を返す。ログインユーザーなら誰でも閲覧可。
+app.get('/api/calendar/:year', authMiddleware, async (req, res) => {
+    try {
+        const year = parseInt(req.params.year, 10);
+        if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+            return res.status(400).json({ error: '年の指定が不正です' });
+        }
+
+        const days = [];
+        const cursor = new Date(year, 0, 1);
+        while (cursor.getFullYear() === year) {
+            const dateStr = formatDateLocal(cursor);
+            const dow = cursor.getDay();
+            const override = companyCalendar.get(dateStr);
+            days.push({
+                date: dateStr,
+                dow,                               // 0=日 〜 6=土
+                isWeekend:   dow === 0 || dow === 6,
+                isJpHoliday: JAPANESE_HOLIDAYS.has(dateStr),
+                isBusinessDay: isBusinessDay(dateStr),
+                override: override
+                    ? { isHoliday: override.isHoliday, note: override.note }
+                    : null,
+            });
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        res.json({ year, days });
+    } catch (err) {
+        console.error('/api/calendar/:year エラー:', err);
+        res.status(500).json({ error: 'Fetch error', details: err.message });
+    }
+});
+
+// PUT /api/calendar/entry
+//   body: { date: 'YYYY-MM-DD', isHoliday: boolean, note?: string }
+//   指定日の上書きを upsert する。admin のみ。
+app.put('/api/calendar/entry', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const { date, isHoliday, note } = req.body || {};
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+            return res.status(400).json({ error: '日付形式が不正です（YYYY-MM-DD）' });
+        }
+        if (typeof isHoliday !== 'boolean') {
+            return res.status(400).json({ error: 'isHoliday は真偽値で指定してください' });
+        }
+        const [y, m, d] = date.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
+            return res.status(400).json({ error: '存在しない日付です' });
+        }
+        const trimmedNote = (note || '').toString().slice(0, 200);
+
+        const pool = await getPool();
+        await pool.request()
+            .input('CalendarDate',    sql.Date,          date)
+            .input('IsHoliday',       sql.Bit,           isHoliday)
+            .input('Note',            sql.NVarChar(200), trimmedNote || null)
+            .input('UpdatedByUserID', sql.Int,           req.user.userId)
+            .query(`
+                MERGE CompanyCalendar AS tgt
+                USING (SELECT @CalendarDate AS CalendarDate) AS src
+                   ON tgt.CalendarDate = src.CalendarDate
+                WHEN MATCHED THEN UPDATE SET
+                    IsHoliday       = @IsHoliday,
+                    Note            = @Note,
+                    UpdatedAt       = GETDATE(),
+                    UpdatedByUserID = @UpdatedByUserID
+                WHEN NOT MATCHED THEN
+                    INSERT (CalendarDate, IsHoliday, Note, UpdatedByUserID)
+                    VALUES (@CalendarDate, @IsHoliday, @Note, @UpdatedByUserID);
+            `);
+
+        companyCalendar.set(date, { isHoliday, note: trimmedNote || null });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT /api/calendar/entry エラー:', err);
+        res.status(500).json({ error: 'Update error', details: err.message });
+    }
+});
+
+// DELETE /api/calendar/:date
+//   指定日の上書きを削除 → デフォルトルールに戻す。admin のみ。
+app.delete('/api/calendar/:date', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const date = req.params.date;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+            return res.status(400).json({ error: '日付形式が不正です（YYYY-MM-DD）' });
+        }
+        const pool = await getPool();
+        await pool.request()
+            .input('CalendarDate', sql.Date, date)
+            .query('DELETE FROM CompanyCalendar WHERE CalendarDate = @CalendarDate');
+        companyCalendar.delete(date);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('DELETE /api/calendar/:date エラー:', err);
+        res.status(500).json({ error: 'Delete error', details: err.message });
+    }
+});
+
+// ============================================================
 // 13. POST /api/admin/maintenance
 //     定期保守を一括実行（admin のみ）
 //     - 注番の自動クローズ
@@ -1851,6 +2061,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🔗 ローカル: http://localhost:${PORT}`);
     console.log(`🔗 外部アクセス: http://192.168.1.8:${PORT}`);
     console.log('');
+
+    // 会社カレンダー（営業日上書き）をメモリに展開
+    await loadCompanyCalendar();
 
     // 起動時に 1 度 + 24 時間ごとに自動クローズを実行
     setTimeout(runAutoCloseScheduled, 5000);

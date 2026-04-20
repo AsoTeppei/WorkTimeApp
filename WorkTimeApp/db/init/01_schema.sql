@@ -110,11 +110,11 @@ CREATE TABLE WorkLogs (
     UserID          INT           NOT NULL,
     DepartmentID    INT           NOT NULL,
     ContentName     NVARCHAR(100) NOT NULL,
-    WorkHours       DECIMAL(5,2)  NOT NULL
-                                  CONSTRAINT CK_WorkLogs_Hours CHECK (WorkHours > 0 AND WorkHours <= 24),
+    WorkHours       DECIMAL(5,2)  NOT NULL,
     WorkLocation    NVARCHAR(10)  NOT NULL DEFAULT N'社内'
                                   CONSTRAINT CK_WorkLogs_Location CHECK (WorkLocation IN (N'社内', N'社外')),
     IsAfterShipment BIT           NOT NULL DEFAULT 0,
+    IsPaidLeave     BIT           NOT NULL DEFAULT 0,
     Details         NVARCHAR(MAX) NULL,
     IsDeleted       BIT           NOT NULL DEFAULT 0,
     CreatedAt       DATETIME2     NOT NULL DEFAULT GETDATE(),
@@ -125,8 +125,20 @@ CREATE TABLE WorkLogs (
         FOREIGN KEY (DepartmentID) REFERENCES Departments(DepartmentID),
     CONSTRAINT FK_WorkLogs_Projects
         FOREIGN KEY (ProjectNo)    REFERENCES Projects(ProjectNo),
+    -- 有給休暇は WorkHours=0 を許可、それ以外は 0 < WorkHours <= 24
+    CONSTRAINT CK_WorkLogs_Hours
+        CHECK (
+            (IsPaidLeave = 1 AND WorkHours = 0)
+            OR
+            (IsPaidLeave = 0 AND WorkHours > 0 AND WorkHours <= 24)
+        ),
+    -- 有給休暇は注番/詳細とも不要
     CONSTRAINT CK_WorkLogs_NoProject_Details
-        CHECK (ProjectNo IS NOT NULL OR (Details IS NOT NULL AND LEN(Details) > 0))
+        CHECK (
+            IsPaidLeave = 1
+            OR ProjectNo IS NOT NULL
+            OR (Details IS NOT NULL AND LEN(Details) > 0)
+        )
 );
 PRINT N'テーブル WorkLogs を作成しました。';
 GO
@@ -178,6 +190,23 @@ CREATE TABLE SchemaMigrations (
     Description  NVARCHAR(500) NULL
 );
 PRINT N'テーブル SchemaMigrations を作成しました。';
+GO
+
+-- 会社カレンダー（管理者が設定する営業日/休業日の上書き）
+-- IsHoliday = 1: 会社休業日（平日でも休み）
+-- IsHoliday = 0: 営業日（土日祝でも出勤）
+-- 行が無い日付はデフォルトルール（土日祝=休業、それ以外=営業）
+CREATE TABLE CompanyCalendar (
+    CalendarDate     DATE           NOT NULL
+                                    CONSTRAINT PK_CompanyCalendar PRIMARY KEY,
+    IsHoliday        BIT            NOT NULL,
+    Note             NVARCHAR(200)  NULL,
+    UpdatedAt        DATETIME2      NOT NULL DEFAULT GETDATE(),
+    UpdatedByUserID  INT            NULL,
+    CONSTRAINT FK_CompanyCalendar_Users
+        FOREIGN KEY (UpdatedByUserID) REFERENCES Users(UserID)
+);
+PRINT N'テーブル CompanyCalendar を作成しました。';
 GO
 
 -- ============================================================
