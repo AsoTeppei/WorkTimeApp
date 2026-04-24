@@ -30,7 +30,7 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 GO
 
-USE WorkTimeDB;
+USE YonekuraSystemDB;
 GO
 
 IF EXISTS (SELECT 1 FROM SchemaMigrations WHERE MigrationID = N'004_company_calendar')

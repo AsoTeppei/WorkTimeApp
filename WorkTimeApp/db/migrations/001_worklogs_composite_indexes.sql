@@ -34,7 +34,7 @@ SET CONCAT_NULL_YIELDS_NULL ON;
 SET NUMERIC_ROUNDABORT OFF;
 GO
 
-USE WorkTimeDB;
+USE YonekuraSystemDB;
 GO
 
 IF EXISTS (SELECT 1 FROM SchemaMigrations WHERE MigrationID = N'001_worklogs_composite_indexes')

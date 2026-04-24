@@ -14,7 +14,7 @@ const COL_DATE = 2, COL_PROJ = 0;
 const DATE_FROM = '2024-01-01';
 
 const dbConfig = {
-  user:'yonekura', password:'yone6066', server:'192.168.1.8', database:'WorkTimeDB',
+  user:'yonekura', password:'yone6066', server:'192.168.1.8', database:'YonekuraSystemDB',
   options:{ encrypt:false, trustServerCertificate:true, instanceName:'SQLEXPRESS', enableArithAbort:true },
   connectionTimeout:15000, requestTimeout:30000
 };

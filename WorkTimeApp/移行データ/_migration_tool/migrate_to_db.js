@@ -1,4 +1,4 @@
-// 移行元 Excel（ｿﾌﾄ作業時間SP.xls）2024-01-01 以降のデータを WorkTimeDB に投入する。
+// 移行元 Excel（ｿﾌﾄ作業時間SP.xls）2024-01-01 以降のデータを YonekuraSystemDB に投入する。
 //
 // 使い方:
 //   node migrate_to_db.js              ← dry-run（トランザクションを ROLLBACK して結果のみ確認）
@@ -38,7 +38,7 @@ const DATA_START = 5;
 const COLS = { proj:0, place:1, date:2, hours:3, lodge:4, name:5, content:6, after:7, detail:8 };
 
 const dbConfig = {
-  user:'yonekura', password:'yone6066', server:'192.168.1.8', database:'WorkTimeDB',
+  user:'yonekura', password:'yone6066', server:'192.168.1.8', database:'YonekuraSystemDB',
   options:{ encrypt:false, trustServerCertificate:true, instanceName:'SQLEXPRESS', enableArithAbort:true },
   connectionTimeout:15000, requestTimeout:120000
 };

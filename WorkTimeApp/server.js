@@ -167,7 +167,7 @@ const dbConfig = {
     user:     'yonekura',
     password: 'yone6066',
     server:   '192.168.1.8',
-    database: 'WorkTimeDB',
+    database: 'YonekuraSystemDB',
     options: {
         encrypt:                false,
         trustServerCertificate: true,
@@ -433,6 +433,95 @@ process.on('SIGINT',  async () => { await shutdownPool(); process.exit(0); });
 process.on('SIGTERM', async () => { await shutdownPool(); process.exit(0); });
 
 // ============================================================
+// 0-z. GET /sso/consume
+//      米倉ポータル発行のワンタイムトークンを受け取り、localStorage に
+//      WorkTimeApp 用の認証トークンをセットしてから index.html にリダイレクトする。
+//      トークンは 1 回限り (UsedAt セットで無効化)、期限切れ・他アプリ向けは無効。
+// ============================================================
+app.get('/sso/consume', async (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    const returnUrl = typeof req.query.returnUrl === 'string' && req.query.returnUrl
+        ? req.query.returnUrl
+        : '/';
+
+    const safeReturnUrl = /^\/[^\r\n]*$/.test(returnUrl) ? returnUrl : '/';
+
+    const renderFailure = (msg) => {
+        res.status(401).setHeader('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html>
+<meta charset="utf-8">
+<title>SSO 失敗</title>
+<div style="font-family:sans-serif;padding:40px;max-width:520px;margin:0 auto;">
+  <h1 style="color:#b91c1c;">SSO ログインに失敗しました</h1>
+  <p>${msg}</p>
+  <p><a href="/">通常のログイン画面へ</a></p>
+</div>`);
+    };
+
+    if (!token) return renderFailure('トークンが指定されていません。');
+
+    try {
+        const pool = await getPool();
+
+        // トークン検証 + 使用済みマーク (UPDATE OUTPUT で原子的に)
+        const r = await pool.request()
+            .input('Token', sql.VarChar(64), token)
+            .query(`
+                UPDATE dbo.SsoTokens
+                   SET UsedAt = SYSDATETIME()
+                 OUTPUT INSERTED.UserID, INSERTED.TargetApp, INSERTED.ExpiresAt, DELETED.UsedAt AS PreviousUsedAt
+                 WHERE Token = @Token
+                   AND UsedAt IS NULL
+                   AND ExpiresAt >= SYSDATETIME()
+                   AND TargetApp = 'WorkTimeApp';
+            `);
+        const entry = r.recordset[0];
+        if (!entry) return renderFailure('トークンが無効または期限切れです。ポータルからやり直してください。');
+
+        const u = await pool.request()
+            .input('UserID', sql.Int, entry.UserID)
+            .query(`
+                SELECT u.UserID, u.Name, u.Role, u.TokenVersion, u.IsActive, d.DepartmentName
+                FROM Users u
+                INNER JOIN Departments d ON d.DepartmentID = u.DepartmentID
+                WHERE u.UserID = @UserID
+            `);
+        const row = u.recordset[0];
+        if (!row || !row.IsActive) return renderFailure('ユーザーが見つかりません。');
+
+        const appToken = createToken(row.UserID, row.Role, row.TokenVersion);
+        const payload = {
+            token: appToken,
+            user: {
+                id: row.UserID,
+                name: row.Name,
+                role: row.Role,
+                department: row.DepartmentName,
+            },
+        };
+        const authJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+        const target = safeReturnUrl.replace(/</g, '\\u003c');
+
+        // index.html 側で使用している localStorage キー ('worktime.auth.v1') にセット。
+        res.setHeader('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html>
+<meta charset="utf-8">
+<title>SSO ログイン中...</title>
+<script>
+try {
+  const data = ${authJson};
+  localStorage.setItem('worktime.auth.v1', JSON.stringify(data));
+  location.replace(${JSON.stringify(target)});
+} catch (e) {
+  document.body.innerText = 'SSO 情報の保存に失敗しました: ' + e.message;
+}
+</script>
+<div style="font-family:sans-serif;padding:40px;text-align:center;">ログイン中...</div>`);
+    } catch (err) {
+        console.error('/sso/consume エラー:', err);
+        renderFailure('サーバーエラーが発生しました。');
+    }
+});
+
+// ============================================================
 // 0-a. GET /api/auth/users
 //      ログイン画面用（公開）— ユーザー一覧 + PIN 設定済みフラグ
 // ============================================================
@@ -511,132 +600,32 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ============================================================
-// 0-c. POST /api/auth/setup-pin
-//      body: { userId, pin }
-//      - PinHash が NULL のユーザーのみ設定可能（初回PIN登録）
+// 社員マスター一元化ポリシー (2026-04-22):
+//   PIN の初回設定 / 変更 / リセットは米倉社内管理ポータルで行う。
+//   WorkTimeApp 側の setup-pin / change-pin / reset-pin は廃止。
+//   互換維持のため 410 Gone + ポータル URL を返す。
 // ============================================================
-app.post('/api/auth/setup-pin', async (req, res) => {
-    try {
-        const { userId, pin } = req.body || {};
-        if (!userId || !isValidPin(pin)) {
-            return res.status(400).json({ error: 'PINは4桁の数字で入力してください' });
-        }
-        const pool = await getPool();
-        const r = await pool.request()
-            .input('UserID', sql.Int, userId)
-            .query(`
-                SELECT u.UserID, u.Name, u.Role, u.PinHash, u.IsActive, d.DepartmentName
-                FROM Users AS u
-                INNER JOIN Departments AS d ON d.DepartmentID = u.DepartmentID
-                WHERE u.UserID = @UserID
-            `);
-        const row = r.recordset[0];
-        if (!row || !row.IsActive) {
-            return res.status(404).json({ error: 'ユーザーが見つかりません' });
-        }
-        if (row.PinHash !== null) {
-            return res.status(400).json({ error: 'このユーザーは既にPINが設定されています。通常のログインをしてください' });
-        }
-        const pinHash = hashPin(pin);
-        const up = await pool.request()
-            .input('UserID',  sql.Int,          row.UserID)
-            .input('PinHash', sql.NVarChar(255), pinHash)
-            .query(`
-                UPDATE Users
-                   SET PinHash      = @PinHash,
-                       PinSetAt     = GETDATE(),
-                       TokenVersion = TokenVersion + 1
-                 OUTPUT INSERTED.TokenVersion
-                 WHERE UserID = @UserID
-            `);
-        const newVersion = up.recordset[0].TokenVersion;
-        const token = createToken(row.UserID, row.Role, newVersion);
-        res.json({
-            token,
-            user: {
-                id:         row.UserID,
-                name:       row.Name,
-                role:       row.Role,
-                department: row.DepartmentName
-            }
-        });
-    } catch (err) {
-        console.error('/api/auth/setup-pin エラー:', err);
-        res.status(500).json({ error: 'Setup error', details: err.message });
-    }
+const PORTAL_URL = 'http://192.168.1.8:7050';
+
+app.post('/api/auth/setup-pin', (req, res) => {
+    res.status(410).json({
+        error: 'PIN の初回設定は米倉社内管理ポータルで行ってください。',
+        portalUrl: PORTAL_URL + '/login',
+    });
 });
 
-// ============================================================
-// 0-d. POST /api/auth/change-pin
-//      要認証。body: { oldPin, newPin }
-// ============================================================
-app.post('/api/auth/change-pin', authMiddleware, async (req, res) => {
-    try {
-        const { oldPin, newPin } = req.body || {};
-        if (!isValidPin(oldPin) || !isValidPin(newPin)) {
-            return res.status(400).json({ error: 'PINは4桁の数字で入力してください' });
-        }
-        const pool = await getPool();
-        const r = await pool.request()
-            .input('UserID', sql.Int, req.user.userId)
-            .query('SELECT PinHash FROM Users WHERE UserID = @UserID');
-        const row = r.recordset[0];
-        if (!row || !row.PinHash) {
-            return res.status(400).json({ error: 'PIN が未設定です' });
-        }
-        if (!verifyPin(oldPin, row.PinHash)) {
-            return res.status(401).json({ error: '現在のPINが正しくありません' });
-        }
-        const newHash = hashPin(newPin);
-        const up = await pool.request()
-            .input('UserID',  sql.Int,          req.user.userId)
-            .input('PinHash', sql.NVarChar(255), newHash)
-            .query(`
-                UPDATE Users
-                   SET PinHash      = @PinHash,
-                       PinSetAt     = GETDATE(),
-                       TokenVersion = TokenVersion + 1
-                 OUTPUT INSERTED.TokenVersion
-                 WHERE UserID = @UserID
-            `);
-        const newVersion = up.recordset[0].TokenVersion;
-        const token = createToken(req.user.userId, req.user.role, newVersion);
-        res.json({ success: true, token });
-    } catch (err) {
-        console.error('/api/auth/change-pin エラー:', err);
-        res.status(500).json({ error: 'Change PIN error', details: err.message });
-    }
+app.post('/api/auth/change-pin', (req, res) => {
+    res.status(410).json({
+        error: 'PIN の変更は米倉社内管理ポータルの社員管理画面で行ってください。',
+        portalUrl: PORTAL_URL + '/users',
+    });
 });
 
-// ============================================================
-// 0-e. POST /api/auth/reset-pin
-//      admin のみ。body: { userId }
-//      対象ユーザーの PinHash を NULL にし、TokenVersion を進めて強制ログアウト
-// ============================================================
-app.post('/api/auth/reset-pin', authMiddleware, requireRole('admin'), async (req, res) => {
-    try {
-        const { userId } = req.body || {};
-        if (!userId) {
-            return res.status(400).json({ error: '対象ユーザーが指定されていません' });
-        }
-        const pool = await getPool();
-        const up = await pool.request()
-            .input('UserID', sql.Int, userId)
-            .query(`
-                UPDATE Users
-                   SET PinHash      = NULL,
-                       PinSetAt     = NULL,
-                       TokenVersion = TokenVersion + 1
-                 WHERE UserID = @UserID
-            `);
-        if (up.rowsAffected[0] === 0) {
-            return res.status(404).json({ error: 'ユーザーが見つかりません' });
-        }
-        res.json({ success: true });
-    } catch (err) {
-        console.error('/api/auth/reset-pin エラー:', err);
-        res.status(500).json({ error: 'Reset error', details: err.message });
-    }
+app.post('/api/auth/reset-pin', (req, res) => {
+    res.status(410).json({
+        error: 'PIN のリセットは米倉社内管理ポータルの社員管理画面で行ってください。',
+        portalUrl: PORTAL_URL + '/users',
+    });
 });
 
 // ============================================================

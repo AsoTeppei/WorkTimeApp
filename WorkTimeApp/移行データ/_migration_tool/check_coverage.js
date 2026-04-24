@@ -22,7 +22,7 @@ const toJSTymd = (d) => {
 };
 
 const dbConfig = {
-  user: 'yonekura', password: 'yone6066', server: '192.168.1.8', database: 'WorkTimeDB',
+  user: 'yonekura', password: 'yone6066', server: '192.168.1.8', database: 'YonekuraSystemDB',
   options: { encrypt:false, trustServerCertificate:true, instanceName:'SQLEXPRESS', enableArithAbort:true },
   connectionTimeout: 15000, requestTimeout: 30000
 };

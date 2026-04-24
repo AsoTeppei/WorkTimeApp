@@ -1,16 +1,16 @@
 @echo off
 REM ============================================================
-REM WorkTimeDB daily backup (SQL Authentication)
+REM YonekuraSystemDB daily backup (SQL Authentication)
 REM   Intended to run from Windows Task Scheduler.
 REM
 REM   Output dir : %BACKUP_DIR%
-REM   File name  : WorkTimeDB_YYYYMMDD_HHMMSS.bak
+REM   File name  : YonekuraSystemDB_YYYYMMDD_HHMMSS.bak
 REM   Retention  : %RETAIN_DAYS% days (older files auto-deleted)
 REM
 REM IMPORTANT - SQL Login required:
 REM   This script uses SQL Server authentication. A dedicated
 REM   login named 'worktime_backup' must exist on the server
-REM   with db_backupoperator role on WorkTimeDB.
+REM   with db_backupoperator role on YonekuraSystemDB.
 REM
 REM NOTE - Delayed expansion is intentionally DISABLED here so
 REM   that '!' characters in the password survive the SET line.
@@ -26,7 +26,7 @@ cd /d "%~dp0"
 
 REM ---- Settings ----
 set SERVER=192.168.1.8\SQLEXPRESS
-set DB=WorkTimeDB
+set DB=YonekuraSystemDB
 set SQLUSER=worktime_backup
 set SQLPASS=ChangeMe_Backup_2026!
 set BACKUP_DIR=C:\WorkTimeDB_Backup

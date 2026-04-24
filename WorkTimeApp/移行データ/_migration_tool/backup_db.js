@@ -1,13 +1,13 @@
-// WorkTimeDB のフルバックアップを SQL Server 側 C:\Backup\ に取得する。
-// 出力ファイル名: WorkTimeDB_YYYYMMDD_HHMMSS.bak
+// YonekuraSystemDB のフルバックアップを SQL Server 側 C:\Backup\ に取得する。
+// 出力ファイル名: YonekuraSystemDB_YYYYMMDD_HHMMSS.bak
 //
 // リストア手順（万一の場合）:
 //   USE master;
-//   ALTER DATABASE WorkTimeDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-//   RESTORE DATABASE WorkTimeDB
-//     FROM DISK = N'C:\Backup\WorkTimeDB_YYYYMMDD_HHMMSS.bak'
+//   ALTER DATABASE YonekuraSystemDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+//   RESTORE DATABASE YonekuraSystemDB
+//     FROM DISK = N'C:\Backup\YonekuraSystemDB_YYYYMMDD_HHMMSS.bak'
 //     WITH REPLACE;
-//   ALTER DATABASE WorkTimeDB SET MULTI_USER;
+//   ALTER DATABASE YonekuraSystemDB SET MULTI_USER;
 
 const sql = require('mssql');
 
@@ -21,7 +21,7 @@ const dbConfig = {
   const now = new Date();
   const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
 
-  console.log(`=== WorkTimeDB バックアップ開始 ===`);
+  console.log(`=== YonekuraSystemDB バックアップ開始 ===`);
   await sql.connect(dbConfig);
 
   console.log('[1/2] SQL Server の既定バックアップディレクトリを取得');
@@ -45,7 +45,7 @@ const dbConfig = {
   let dir = dirRes.recordset[0]?.BackupDirectory;
   if (!dir) throw new Error('既定バックアップディレクトリが取得できませんでした');
   if (!dir.endsWith('\\')) dir += '\\';
-  const filePath = `${dir}WorkTimeDB_${ts}.bak`;
+  const filePath = `${dir}YonekuraSystemDB_${ts}.bak`;
   console.log(`  既定パス: ${dir}`);
   console.log(`  出力先: ${filePath}`);
 
@@ -54,9 +54,9 @@ const dbConfig = {
   await new sql.Request()
     .input('path', sql.NVarChar, filePath)
     .query(`
-      BACKUP DATABASE WorkTimeDB
+      BACKUP DATABASE YonekuraSystemDB
         TO DISK = @path
-        WITH FORMAT, INIT, NAME = N'WorkTimeDB-Full Backup', STATS = 25;
+        WITH FORMAT, INIT, NAME = N'YonekuraSystemDB-Full Backup', STATS = 25;
     `);
   const sec = ((Date.now() - start)/1000).toFixed(1);
   console.log(`完了 (${sec} 秒)`);

@@ -8,21 +8,21 @@
 USE master;
 GO
 
-IF DB_ID(N'WorkTimeDB') IS NOT NULL
+IF DB_ID(N'YonekuraSystemDB') IS NOT NULL
 BEGIN
-    ALTER DATABASE WorkTimeDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE WorkTimeDB;
-    PRINT N'既存の WorkTimeDB を削除しました。';
+    ALTER DATABASE YonekuraSystemDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE YonekuraSystemDB;
+    PRINT N'既存の YonekuraSystemDB を削除しました。';
 END
 GO
 
-CREATE DATABASE WorkTimeDB
+CREATE DATABASE YonekuraSystemDB
     COLLATE Japanese_CI_AS;
 GO
-PRINT N'データベース WorkTimeDB を作成しました。';
+PRINT N'データベース YonekuraSystemDB を作成しました。';
 GO
 
-USE WorkTimeDB;
+USE YonekuraSystemDB;
 GO
 
 -- ============================================================

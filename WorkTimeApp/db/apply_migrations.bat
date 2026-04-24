@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM WorkTimeDB -- apply migrations (SQL Authentication)
+REM YonekuraSystemDB -- apply migrations (SQL Authentication)
 REM   Runs db\migrations\*.sql in order against the live DB.
 REM
 REM   - Uses SQL auth (a login with db_owner or sysadmin rights).
@@ -21,7 +21,7 @@ setlocal
 cd /d "%~dp0"
 
 set SERVER=192.168.1.8\SQLEXPRESS
-set DB=WorkTimeDB
+set DB=YonekuraSystemDB
 set SQLUSER=yonekura
 
 echo ================================================================

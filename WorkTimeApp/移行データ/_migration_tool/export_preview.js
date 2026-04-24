@@ -43,7 +43,7 @@ const dbConfig = {
   user:     'yonekura',
   password: 'yone6066',
   server:   '192.168.1.8',
-  database: 'WorkTimeDB',
+  database: 'YonekuraSystemDB',
   options:  {
     encrypt:                false,
     trustServerCertificate: true,

@@ -1,8 +1,8 @@
 @echo off
 REM ============================================================
-REM WorkTimeDB -- initial setup (DESTRUCTIVE)
+REM YonekuraSystemDB -- initial setup (DESTRUCTIVE)
 REM   Runs db\init\*.sql against an empty DB.
-REM   WARNING: 01_schema.sql drops the existing WorkTimeDB.
+REM   WARNING: 01_schema.sql drops the existing YonekuraSystemDB.
 REM            DO NOT run this against a production DB.
 REM ============================================================
 
@@ -12,10 +12,10 @@ cd /d "%~dp0"
 set SERVER=192.168.1.8\SQLEXPRESS
 
 echo ================================================================
-echo  WorkTimeDB INITIAL SETUP (destructive)
+echo  YonekuraSystemDB INITIAL SETUP (destructive)
 echo   Server: %SERVER%
 echo.
-echo  The existing WorkTimeDB will be DROPPED. Continue?
+echo  The existing YonekuraSystemDB will be DROPPED. Continue?
 echo ================================================================
 set /p CONFIRM="Type YES to continue: "
 if /i not "%CONFIRM%"=="YES" (

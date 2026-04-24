@@ -26,7 +26,7 @@ run_init.bat
 apply_migrations.bat
 ```
 
-`run_init.bat` は既存の WorkTimeDB を DROP するので、**本番環境では実行しないこと**。
+`run_init.bat` は既存の YonekuraSystemDB を DROP するので、**本番環境では実行しないこと**。
 
 ## 本番 DB の更新
 

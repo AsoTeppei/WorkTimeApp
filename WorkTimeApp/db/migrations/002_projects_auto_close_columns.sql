@@ -27,7 +27,7 @@
 --   point the columns exist.
 -- ============================================================
 
-USE WorkTimeDB;
+USE YonekuraSystemDB;
 GO
 
 IF EXISTS (SELECT 1 FROM SchemaMigrations WHERE MigrationID = N'002_projects_auto_close_columns')
